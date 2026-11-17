@@ -1,0 +1,12 @@
+{
+  "name": "fuzzloom-site",
+  "private": true,
+  "type": "module",
+  "description": "The Fuzzloom website: landing page and docs, built from the Fuzzloom repository's markdown",
+  "scripts": {
+    "build": "node build/docs.mjs"
+  },
+  "devDependencies": {
+    "marked": "^15.0.0"
+  }
+}

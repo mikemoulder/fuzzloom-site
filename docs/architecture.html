@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en" data-type="software" data-radius="sharp" data-buttons="tonal" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How it works: Fuzzloom docs</title>
+<meta name="description" content="Fuzzloom has two halves with a strict split.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How it works: Fuzzloom docs">
+<meta property="og:image" content="../share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0f1f10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..700&family=Figtree:wght@400..600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/system.css">
+<link rel="stylesheet" href="../assets/motion/motion.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+<header class="nav">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#doc">Skip to content</a>
+    <a class="nav__logo" href="../"><span class="mark" data-mark="dots" aria-hidden="true"></span>Fuzzloom <span class="docs__crumb">Docs</span></a>
+    <nav class="nav__links" aria-label="Main">
+      <div class="nav__item"><a class="nav__link" href="../">Home</a></div>
+      <div class="nav__item"><a class="nav__link" href="cli.html">CLI</a></div>
+      <div class="nav__item"><a class="nav__link" href="../llms.txt">llms.txt</a></div>
+    </nav>
+    <div class="nav__actions">
+      <a class="nav__link" href="https://github.com/MikeMoulder/fuzzloom">GitHub</a>
+      <a class="btn btn--primary" href="quickstart.html">Read the quick start</a>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+<div class="docs__layout wrap">
+  <aside class="side" aria-label="Documentation">
+    <label class="side__search"><span class="sr-only">Find a page</span><input type="search" placeholder="Find a page" data-docs-search></label>
+    <nav>
+        <div class="side__group">
+          <p class="side__label">Getting started</p>
+          <ul><li><a href="index.html">Introduction</a></li><li><a href="quickstart.html">Quick start</a></li><li><a href="installation.html">Installation</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Guides</p>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Reference</p>
+          <ul><li><a href="configuration.html">Configuration</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="cli.html">CLI reference</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Concepts</p>
+          <ul><li><a href="architecture.html" aria-current="page">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li></ul>
+        </div>
+    </nav>
+  </aside>
+  <main class="doc" id="doc">
+    <p class="doc__crumbs"><a href="index.html">Docs</a> / Concepts</p>
+    <article class="prose">
+<h1 id="architecture">Architecture</h1>
+<p>Fuzzloom has two halves with a strict split.</p>
+<ul>
+<li><strong>The Fe library</strong> (<a href="https://github.com/MikeMoulder/fuzzloom/tree/main/ingots/fuzzloom/src" rel="noopener"><code>ingots/fuzzloom</code></a>) holds every testing algorithm: random generation, shrinking, mutation and differential digests. It runs inside <code>fe test</code>, on whichever backend executes it.</li>
+<li><strong>The TypeScript CLI</strong> (<a href="https://github.com/MikeMoulder/fuzzloom/tree/main/packages/cli/src" rel="noopener"><code>packages/cli</code></a>) orchestrates. It discovers targets, generates test harnesses, runs <code>fe</code>, classifies the output, searches when the library cannot report an input, and stores failures.</li>
+</ul>
+<p>The CLI never generates inputs or shrinks anything that Fe can shrink. The only algorithms in TypeScript are the ones that need information Fe cannot hand back: recovering the input of an abort, shrinking by replay, and comparing two backends. Exact guarantees for each algorithm are in <a href="algorithms.html">algorithms.md</a>.</p>
+<div class="code"><span class="code__lang">mermaid</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-mermaid">flowchart TB
+  subgraph CLI["packages/cli"]
+    direction LR
+    DISC["discover.ts&lt;br/&gt;targets, effects,&lt;br/&gt;fixtures, ranges"] --&gt; ENG["engine.ts&lt;br/&gt;rounds and searches"]
+    ENG --&gt; HAR["harness.ts&lt;br/&gt;generated ingots"]
+    ENG --&gt; FE["fe.ts&lt;br/&gt;run and classify"]
+    FE --&gt; ABI["abi.ts&lt;br/&gt;decode payloads"]
+    ENG --&gt; STORE["store.ts&lt;br/&gt;failure records"]
+    ENG --&gt; REP["report.ts, junit.ts&lt;br/&gt;terminal, JSON, JUnit"]
+  end
+  subgraph LIB["ingots/fuzzloom"]
+    direction LR
+    RNG["rng"] --&gt; GEN["gen, bias, draw"]
+    GEN --&gt; CHK["check, property, shrink"]
+    GEN --&gt; MUT["mutate"]
+    GEN --&gt; DIF["diff"]
+    CHK &amp; MUT &amp; DIF --&gt; PAY["payload"]
+  end
+  HAR -. "imports" .-&gt; LIB
+  FE -- "fe test (sonatina)" --&gt; X1["generated ingot"]
+  FE -- "fe test --backend native" --&gt; X2["generated ingot"]</code></pre></div>
+<h2 id="the-fe-library"><a class="anchor" href="#the-fe-library" aria-hidden="true" tabindex="-1">#</a>The Fe library</h2>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>rng.fe</code></td>
+<td>xorshift64* generator, splitmix64 seed derivation, unbiased bounded sampling</td>
+</tr>
+<tr>
+<td><code>word.fe</code></td>
+<td>The <code>Word</code> trait: every argument type to and from a <code>u256</code> word (zigzag for signed)</td>
+</tr>
+<tr>
+<td><code>input.fe</code></td>
+<td><code>Input</code> (up to three words) and <code>Bounds</code> (an inclusive word range per argument)</td>
+</tr>
+<tr>
+<td><code>gen.fe</code>, <code>bias.fe</code></td>
+<td>Uniform ranges and boundary-biased edges</td>
+</tr>
+<tr>
+<td><code>draw.fe</code></td>
+<td>The campaign input stream: biased per-argument draws plus correlated draws; <code>generated_at</code></td>
+</tr>
+<tr>
+<td><code>property.fe</code></td>
+<td><code>prop1/2/3</code> wrappers: any callable returning <code>bool</code>, its effect row forwarded</td>
+</tr>
+<tr>
+<td><code>shrink.fe</code></td>
+<td>Sweep, greedy descent and joint moves</td>
+</tr>
+<tr>
+<td><code>check.fe</code></td>
+<td>Campaigns (<code>find</code>, <code>check</code>, <code>check_bounded</code>), <code>replay</code>, <code>input_at</code></td>
+</tr>
+<tr>
+<td><code>mutate.fe</code></td>
+<td>Mutation campaigns around a saved input: <code>check_mutating</code>, <code>mutant_at</code>, <code>mutated_at</code></td>
+</tr>
+<tr>
+<td><code>diff.fe</code></td>
+<td><code>Target</code> and <code>target1/2/3</code>; digests, checkpoints, <code>evaluate</code>, <code>target_input_at</code></td>
+</tr>
+<tr>
+<td><code>payload.fe</code></td>
+<td>The <code>#[error]</code> structs that carry every result out of Fe</td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Generic over effects.</strong> A property is any <code>Fn</code> returning <code>bool</code>. The wrappers declare <code>uses E = F::E</code>, so a property&#39;s effects flow through <code>check(...)</code> to the caller, who provides them with <code>with</code>. The library therefore never needs to know which effects a user&#39;s code has. A generic callable needs <code>uses F::E</code> at every level, and the library is written that way throughout.</p>
+<p><strong>Results leave as reverts.</strong> A test function cannot return data to <code>fe test</code>, but a revert payload is printed. Every harness entry point (<code>check</code>, <code>replay</code>, <code>input_at</code>, <code>digest_checkpoints</code>, <code>evaluate</code>, and so on) ends with exactly one <code>revert_error(...)</code> of a payload struct. <code>std::evm::revert_error</code> works on both backends, and the payload bytes are identical on each; the known-answer digest test checks this.</p>
+<p><strong>Bounded variants.</strong> Each entry point has a <code>_within</code> form, or takes <code>bounds</code> directly, so a declared input range applies to the campaign, recovery, mutation and digests alike. <code>target_bounds_of(t)</code> exists because an associated-function call on a generic type cannot appear in a harness expression in fe 26.6.</p>
+<h2 id="the-cli"><a class="anchor" href="#the-cli" aria-hidden="true" tabindex="-1">#</a>The CLI</h2>
+<h3 id="discovery-discoverts"><a class="anchor" href="#discovery-discoverts" aria-hidden="true" tabindex="-1">#</a>Discovery (<code>discover.ts</code>)</h3>
+<p>Discovery reads every <code>.fe</code> file under <code>src/</code>, with comments blanked so commented-out code is ignored and line numbers stay right. It matches <code>pub fn prop_*</code> and <code>pub fn diff_*</code> signatures, including ones that <code>fe fmt</code> wrapped across lines. For each match it:</p>
+<ol>
+<li>parses the parameters and keeps each argument&#39;s label: positional (<code>_ x</code>), the name, or an explicit label;</li>
+<li>parses a <code>uses (...)</code> clause into effect types;</li>
+<li>reads <code>/// fuzzloom: &lt;arg&gt; in &lt;lo&gt;..=&lt;hi&gt;</code> lines directly above the function into word ranges (<a href="https://github.com/MikeMoulder/fuzzloom/blob/main/packages/cli/src/bounds.ts" rel="noopener"><code>bounds.ts</code></a>);</li>
+<li>resolves each effect to exactly one fixture, by return type or else by snake-case name;</li>
+<li>computes the Fe import paths for the target, its effect types and its fixtures from the file layout (<code>src/a/b.fe</code> is <code>&lt;ingot&gt;::a::b</code>).</li>
+</ol>
+<p>Anything that cannot be tested is returned as skipped, with the reason.</p>
+<h3 id="harness-generation-harnessts"><a class="anchor" href="#harness-generation-harnessts" aria-hidden="true" tabindex="-1">#</a>Harness generation (<code>harness.ts</code>)</h3>
+<p>A harness is a throwaway ingot under <code>&lt;your ingot&gt;/.fuzzloom/tmp/&lt;label&gt;-&lt;backend&gt;/</code>. Its dependencies use relative paths, so the same file works for Windows <code>fe.exe</code> and for fe inside WSL. Every case becomes one <code>#[test]</code>. For the bounded, effectful vesting property in <code>examples/token-ledger</code>:</p>
+<div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">// Generated by the Fuzzloom CLI. Do not edit.
+use fuzzloom::*
+use token_ledger::policy::Clock
+use token_ledger::policy::fixture_clock
+use token_ledger::prop_vested_never_exceeds_total
+
+#[test]
+fn case_0() {
+    check_bounded(prop2(|a0: u128, a1: u64| {
+        var e0 = fixture_clock()
+        with (Clock = e0) { prop_vested_never_exceeds_total(a0, start: a1) }
+    }), bounds: bounds_of(prop2(|a0: u128, a1: u64| {
+        var e0 = fixture_clock()
+        with (Clock = e0) { prop_vested_never_exceeds_total(a0, start: a1) }
+    })).restrict(1, lo: 0x6372bd80, hi: 0x6553f100), seed: derive_seed(7, 0x5f4a556c0d9d1a2c), runs: 10000)
+}</code></pre></div>
+<p>The closure is repeated rather than bound to a variable because Fe closures are not <code>Copy</code>. A target without effects is passed directly as a function item (<code>prop2(prop_withdraw_never_overdraws)</code>).</p>
+<p>Harness modes:</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Fe entry point</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>check</code></td>
+<td><code>check</code>, <code>check_bounded</code>, <code>check_mutating(_within)</code></td>
+<td>A campaign, fresh or around a saved input</td>
+</tr>
+<tr>
+<td><code>replay</code></td>
+<td><code>replay</code></td>
+<td>One saved or candidate input</td>
+</tr>
+<tr>
+<td><code>input_at</code></td>
+<td><code>input_at</code>, <code>mutant_at(_within)</code></td>
+<td>The input at an iteration, without evaluating it</td>
+</tr>
+<tr>
+<td><code>replay_at</code></td>
+<td><code>replay</code> of <code>generated_at</code> / <code>mutated_at</code></td>
+<td>Evaluating that input in the same test</td>
+</tr>
+<tr>
+<td><code>checkpoints</code></td>
+<td><code>digest_checkpoints(_within)</code></td>
+<td>Up to 256 prefix digests in one pass</td>
+</tr>
+<tr>
+<td><code>target_input_at</code></td>
+<td><code>target_input_at(_within)</code></td>
+<td>The input a digest drew at an iteration</td>
+</tr>
+<tr>
+<td><code>evaluate</code>, <code>evaluate_at</code></td>
+<td><code>evaluate</code></td>
+<td>One differential output</td>
+</tr>
+</tbody></table>
+</div>
+<h3 id="running-fe-and-classifying-fets-abits"><a class="anchor" href="#running-fe-and-classifying-fets-abits" aria-hidden="true" tabindex="-1">#</a>Running fe and classifying (<code>fe.ts</code>, <code>abi.ts</code>)</h3>
+<p><code>runBatch</code> runs <code>fe test --color never [--backend native] &lt;dir&gt;</code>. On Windows the native backend goes through <code>wsl -- bash -lc</code>, with the path translated by <code>wslpath</code>. Both backends of a differential round run concurrently. The output is split into one block per <code>PASS|FAIL [time] name</code> line, and each block is classified on its own (see <a href="algorithms.html#10-classifying-outcomes">algorithms.md, section 10</a>). A missing result line is <code>unparsed</code>, never a pass. A compile error, which produces no result lines at all, applies to every test in the batch.</p>
+<p>Selectors in <code>abi.ts</code> are computed with keccak-256 from the signatures, which mirror <code>payload.fe</code> field for field. They are never hardcoded, and a test checks them against selectors the Fe compiler actually emitted.</p>
+<h3 id="the-engine-enginets"><a class="anchor" href="#the-engine-enginets" aria-hidden="true" tabindex="-1">#</a>The engine (<code>engine.ts</code>)</h3>
+<p>The engine thinks in <strong>rounds</strong>. Each <code>fe test</code> invocation compiles once, so every evaluation that does not depend on another goes into the same generated ingot.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Rounds</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>fuzz</code></td>
+<td>1 round: every property&#39;s campaign, plus one mutation campaign per saved failure. For each abort: k-ary search rounds on the run count, 1 recovery round (<code>input_at</code> + <code>replay_at</code>), then shrink-by-replay rounds</td>
+</tr>
+<tr>
+<td><code>diff</code></td>
+<td>1 round on each backend at once: 256 checkpoints per target. For each divergence: search rounds of one checkpoint test per backend, then 1 recovery round</td>
+</tr>
+<tr>
+<td><code>replay</code>, <code>reproduce</code></td>
+<td>1 round per backend that has records, both at once</td>
+</tr>
+</tbody></table>
+</div>
+<p>Results are combined per target in a fixed order of precedence:</p>
+<ol>
+<li>the fresh campaign&#39;s failure, abort or infrastructure outcome;</li>
+<li>otherwise, the first mutation campaign that failed, aborted or hit infrastructure;</li>
+<li>otherwise, a pass.</li>
+</ol>
+<h3 id="failure-records-storets"><a class="anchor" href="#failure-records-storets" aria-hidden="true" tabindex="-1">#</a>Failure records (<code>store.ts</code>)</h3>
+<p><code>.fuzzloom/failures/&lt;target&gt;-&lt;fnv8&gt;.json</code>, version 1. The id is a hash of the target name and the shrunk input, so finding the same minimal failure again updates the record instead of duplicating it.</p>
+<div class="code"><span class="code__lang">json</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-json">{
+  "version": 1,
+  "id": "prop_withdraw_never_overdraws-2c81bbb3",
+  "kind": "property",
+  "target": "prop_withdraw_never_overdraws",
+  "args": [{ "name": "balance", "type": "u128" }, { "name": "amount", "type": "u128" }],
+  "input": ["0x0", "0x1"],
+  "values": ["0", "1"],
+  "original": ["0xa2a5905cfacdaa5f06766da86b098bbb", "0xa2a5905cfacdaa5f06766da86b098bbc"],
+  "iteration": "18",
+  "base_seed": "7",
+  "runs": "10000",
+  "backend": "sonatina",
+  "fe_version": "fe 26.6.0 (5b3f96a)",
+  "status": "open"
+}</code></pre></div>
+<p><code>kind</code> is <code>property</code>, <code>abort</code> (with <code>detail</code>, the panic reason) or <code>differential</code> (backend <code>both</code>, with both outputs in <code>detail</code>). A record found by a mutation campaign carries <code>seeded_by</code>. Records are only ever replayed with their stored input, so they stay valid when the generator changes. <code>replay</code> refuses a record whose target changed signature, and says so.</p>
+<h3 id="reports-reportts-junitts"><a class="anchor" href="#reports-reportts-junitts" aria-hidden="true" tabindex="-1">#</a>Reports (<code>report.ts</code>, <code>junit.ts</code>)</h3>
+<p>There are three outputs. The terminal output uses colour unless <code>NO_COLOR</code> is set or output is not a TTY. <code>--json</code> output preserves every field, with bigints as strings. <code>--junit</code> writes one test case per property, differential target or saved failure: findings are <code>&lt;failure&gt;</code>, infrastructure is <code>&lt;error&gt;</code>, and text is escaped, stripped of colour and of characters XML cannot carry.</p>
+<h2 id="packaging"><a class="anchor" href="#packaging" aria-hidden="true" tabindex="-1">#</a>Packaging</h2>
+<p>The npm package <code>fuzzloom</code> contains compiled JavaScript (<code>dist/</code>), because Node does not strip TypeScript types under <code>node_modules</code>. It also contains a copy of the Fe library (<code>ingot/</code>), made by the <code>prepack</code> script. <code>libraryIngot()</code> prefers a repository checkout when running from source, so a stale bundled copy never shadows the live library, and falls back to the bundled copy in an installed package. CI packs the package, installs it into an empty prefix and runs it on a project outside the repo, checking that the bundled library is the one used.</p>
+<h2 id="constraints-that-shaped-the-design"><a class="anchor" href="#constraints-that-shaped-the-design" aria-hidden="true" tabindex="-1">#</a>Constraints that shaped the design</h2>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Constraint (fe 26.6)</th>
+<th>Design response</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A test can only report through a revert payload</td>
+<td>Every entry point ends with one ABI-encoded <code>#[error]</code>; the CLI decodes by selector</td>
+</tr>
+<tr>
+<td>Fe cannot catch a panic, so an abort carries no input</td>
+<td>A deterministic, prefix-consistent stream, k-ary search on the run count, and shrinking by replay</td>
+</tr>
+<tr>
+<td><code>fe test</code> compiles once per invocation</td>
+<td>Rounds: every independent case in one generated ingot</td>
+</tr>
+<tr>
+<td>Each EVM test is capped at 10^9 gas</td>
+<td>Campaign sizes chosen to fit; out-of-gas is classified as infrastructure, never as a finding</td>
+</tr>
+<tr>
+<td>The native backend runs on Linux and macOS only</td>
+<td>Native runs through WSL on Windows; <code>doctor</code> reports its availability</td>
+</tr>
+<tr>
+<td><code>Evm</code> effects are a type error on native</td>
+<td>Differential testing compares shared logic; effects come from user fixtures</td>
+</tr>
+<tr>
+<td>Fixed-size arrays are not allowed in custom errors</td>
+<td>Checkpoints use <code>DynArray&lt;u256&gt;</code> built from a <code>MemVec</code></td>
+</tr>
+<tr>
+<td>Closures are not <code>Copy</code></td>
+<td>The harness repeats the closure expression</td>
+</tr>
+<tr>
+<td>An <code>Fn</code> impl with a forwarded effect row, called through a generic bound, crashes the compiler</td>
+<td>The library avoids that shape; reproduction in <a href="https://github.com/MikeMoulder/fuzzloom/tree/main/spike/compiler-bugs/fn-impl-forwarded-effect" rel="noopener"><code>spike/compiler-bugs</code></a></td>
+</tr>
+</tbody></table>
+</div>
+
+    </article>
+    <nav class="doc__pager" aria-label="Previous and next page">
+      <a class="doc__prev" href="cli.html"><span>Previous</span>CLI reference</a>
+      <a class="doc__next" href="algorithms.html"><span>Next</span>Algorithms and guarantees</a>
+    </nav>
+    <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/architecture.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="side__label">On this page</p><ul><li><a href="#the-fe-library">The Fe library</a></li><li><a href="#the-cli">The CLI</a></li><li><a href="#packaging">Packaging</a></li><li><a href="#constraints-that-shaped-the-design">Constraints that shaped the design</a></li></ul>
+  </aside>
+</div>
+<footer class="docs__footer">
+  <div class="wrap"><span>&copy; 2026 Fuzzloom &nbsp; Apache License 2.0</span><span><a href="https://github.com/MikeMoulder/fuzzloom">GitHub</a> &nbsp; <a href="https://www.npmjs.com/package/fuzzloom">npm</a> &nbsp; <a href="../llms-full.txt">llms-full.txt</a></span></div>
+</footer>
+<script type="module" src="../assets/system.js"></script>
+<script type="module" src="../assets/motion/motion.js"></script>
+<script type="module" src="docs.js"></script>
+</body>
+</html>

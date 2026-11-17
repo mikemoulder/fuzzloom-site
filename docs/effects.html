@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en" data-type="software" data-radius="sharp" data-buttons="tonal" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Effects and fixtures: Fuzzloom docs</title>
+<meta name="description" content="Fe passes state and context into functions as effects (uses). Fuzzloom supports this pattern directly. For each effect type a target uses, provide a public">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Effects and fixtures: Fuzzloom docs">
+<meta property="og:image" content="../share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0f1f10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..700&family=Figtree:wght@400..600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/system.css">
+<link rel="stylesheet" href="../assets/motion/motion.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+<header class="nav">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#doc">Skip to content</a>
+    <a class="nav__logo" href="../"><span class="mark" data-mark="dots" aria-hidden="true"></span>Fuzzloom <span class="docs__crumb">Docs</span></a>
+    <nav class="nav__links" aria-label="Main">
+      <div class="nav__item"><a class="nav__link" href="../">Home</a></div>
+      <div class="nav__item"><a class="nav__link" href="cli.html">CLI</a></div>
+      <div class="nav__item"><a class="nav__link" href="../llms.txt">llms.txt</a></div>
+    </nav>
+    <div class="nav__actions">
+      <a class="nav__link" href="https://github.com/MikeMoulder/fuzzloom">GitHub</a>
+      <a class="btn btn--primary" href="quickstart.html">Read the quick start</a>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+<div class="docs__layout wrap">
+  <aside class="side" aria-label="Documentation">
+    <label class="side__search"><span class="sr-only">Find a page</span><input type="search" placeholder="Find a page" data-docs-search></label>
+    <nav>
+        <div class="side__group">
+          <p class="side__label">Getting started</p>
+          <ul><li><a href="index.html">Introduction</a></li><li><a href="quickstart.html">Quick start</a></li><li><a href="installation.html">Installation</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Guides</p>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html" aria-current="page">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Reference</p>
+          <ul><li><a href="configuration.html">Configuration</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="cli.html">CLI reference</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Concepts</p>
+          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li></ul>
+        </div>
+    </nav>
+  </aside>
+  <main class="doc" id="doc">
+    <p class="doc__crumbs"><a href="index.html">Docs</a> / Guides</p>
+    <article class="prose">
+<h1 id="effects-and-fixtures">Effects and fixtures</h1>
+<p>Fe passes state and context into functions as effects (<code>uses</code>). Fuzzloom supports this pattern directly. For each effect type a target uses, provide a public function whose name starts with <code>fixture_</code> and which returns that type:</p>
+<div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">pub struct Ledger { pub alice: u128, pub bob: u128, pub fees: u128 }
+
+pub fn fixture_ledger() -&gt; Ledger {
+    Ledger { alice: 1000000, bob: 0, fees: 0 }
+}
+
+pub fn prop_overdraft_changes_nothing(_ amount: u128) -&gt; bool
+uses (ledger: mut Ledger, policy: FeePolicy) {
+    let alice = ledger.alice
+    if amount &lt;= alice { return true }
+    !transfer(amount, to_bob: true) &amp;&amp; ledger.alice == alice
+}</code></pre></div>
+<p><strong>How the fixture is found.</strong></p>
+<ol>
+<li>Fuzzloom first looks for exactly one <code>pub fn fixture_*()</code> that returns the effect&#39;s type.</li>
+<li>If there is none, it looks for exactly one fixture named after the type in snake case. For <code>uses (clock: Clock)</code> that is <code>fixture_clock</code>.</li>
+</ol>
+<p>The second rule is for <strong>trait</strong> effects. The fixture returns any type that implements the trait:</p>
+<div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">pub trait Clock { fn now(self) -&gt; u64 }
+pub struct FixedClock { pub at: u64 }
+impl Clock for FixedClock { fn now(self) -&gt; u64 { self.at } }
+
+pub fn fixture_clock() -&gt; FixedClock { FixedClock { at: 1700000000 } }</code></pre></div>
+<p><strong>Fresh state every time.</strong> Every evaluation builds every effect from its fixture again. Evaluations never see each other&#39;s changes, so a failure replays exactly, and shrinking compares like with like. A bug that only appears after a particular sequence of calls is therefore out of reach for now; see <a href="https://github.com/MikeMoulder/fuzzloom#what-fuzzloom-does-not-do" rel="noopener">what Fuzzloom does not do</a>.</p>
+<p><strong>When a target is skipped.</strong> A target whose effect has no fixture, or several, is skipped with the reason:</p>
+<div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">  skip  prop_two   src/lib.fe:4  uses L, and more than one fixture builds it (fixture_a, fixture_b)
+  skip  prop_none  src/lib.fe:5  uses Wallet, but the ingot has no `pub fn fixture_wallet() -&gt; Wallet` to build it</code></pre></div>
+<p><strong>Where the types live.</strong> The effect type must be defined in your ingot, or imported with a <code>use</code> line in the file that defines the target. <code>fuzzloom list</code> shows what each target uses and which fixture builds it:</p>
+<div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">  prop  prop_transfer_conserves_supply(amount: u128, to_bob: bool)  src/lib.fe:54
+        uses mut Ledger &lt;- fixture_ledger(), FeePolicy &lt;- fixture_policy()</code></pre></div>
+
+    </article>
+    <nav class="doc__pager" aria-label="Previous and next page">
+      <a class="doc__prev" href="results.html"><span>Previous</span>Reading the results</a>
+      <a class="doc__next" href="ranges.html"><span>Next</span>Input ranges</a>
+    </nav>
+    <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/guide.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    
+  </aside>
+</div>
+<footer class="docs__footer">
+  <div class="wrap"><span>&copy; 2026 Fuzzloom &nbsp; Apache License 2.0</span><span><a href="https://github.com/MikeMoulder/fuzzloom">GitHub</a> &nbsp; <a href="https://www.npmjs.com/package/fuzzloom">npm</a> &nbsp; <a href="../llms-full.txt">llms-full.txt</a></span></div>
+</footer>
+<script type="module" src="../assets/system.js"></script>
+<script type="module" src="../assets/motion/motion.js"></script>
+<script type="module" src="docs.js"></script>
+</body>
+</html>

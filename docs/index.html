@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-type="software" data-radius="sharp" data-buttons="tonal" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fuzzloom docs</title>
+<meta name="description" content="Fuzzloom is property-based testing and fuzzing for the Fe language, with differential testing between Fe's two backends.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Fuzzloom docs">
+<meta property="og:image" content="../share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0f1f10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..700&family=Figtree:wght@400..600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/system.css">
+<link rel="stylesheet" href="../assets/motion/motion.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+<header class="nav">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#doc">Skip to content</a>
+    <a class="nav__logo" href="../"><span class="mark" data-mark="dots" aria-hidden="true"></span>Fuzzloom <span class="docs__crumb">Docs</span></a>
+    <nav class="nav__links" aria-label="Main">
+      <div class="nav__item"><a class="nav__link" href="../">Home</a></div>
+      <div class="nav__item"><a class="nav__link" href="cli.html">CLI</a></div>
+      <div class="nav__item"><a class="nav__link" href="../llms.txt">llms.txt</a></div>
+    </nav>
+    <div class="nav__actions">
+      <a class="nav__link" href="https://github.com/MikeMoulder/fuzzloom">GitHub</a>
+      <a class="btn btn--primary" href="quickstart.html">Read the quick start</a>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+<div class="docs__layout wrap">
+  <aside class="side" aria-label="Documentation">
+    <label class="side__search"><span class="sr-only">Find a page</span><input type="search" placeholder="Find a page" data-docs-search></label>
+    <nav>
+        <div class="side__group">
+          <p class="side__label">Getting started</p>
+          <ul><li><a href="index.html" aria-current="page">Introduction</a></li><li><a href="quickstart.html">Quick start</a></li><li><a href="installation.html">Installation</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Guides</p>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Reference</p>
+          <ul><li><a href="configuration.html">Configuration</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="cli.html">CLI reference</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Concepts</p>
+          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li></ul>
+        </div>
+    </nav>
+  </aside>
+  <main class="doc" id="doc">
+    <p class="doc__crumbs"><a href="index.html">Docs</a> / Getting started</p>
+    <article class="prose">
+<h1 id="introduction">Introduction</h1>
+<p>Fuzzloom is property-based testing and fuzzing for the <a href="https://fe-lang.org" rel="noopener">Fe</a> language, with differential testing between Fe&#39;s two backends.</p>
+<p>You write a <strong>property</strong> as an ordinary Fe function that returns <code>bool</code>. Fuzzloom generates thousands of inputs for it inside Fe and shrinks every failure to a small counterexample. It saves each failure so you can replay it after the fix. It also runs the same logic on <strong>sonatina (EVM)</strong> and <strong>native</strong>, and pins the first input on which they disagree.</p>
+<div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">/// A withdrawal is allowed only up to the balance.
+pub fn prop_withdraw_never_overdraws(_ balance: u128, _ amount: u128) -&gt; bool {
+    !can_withdraw(balance, amount) || amount &lt;= balance
+}</code></pre></div>
+<div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">$ npx fuzzloom fuzz --seed 7
+FAIL  prop_withdraw_never_overdraws(u128, u128)  counterexample at input 19
+      balance = 0
+      amount  = 1
+      shrunk from 216194592332408381925550103855666662331, 216194592332408381925550103855666662332 in 906 evaluations
+      reproduce: fuzzloom reproduce prop_withdraw_never_overdraws-2c81bbb3</code></pre></div>
+<h2 id="what-you-get"><a class="anchor" href="#what-you-get" aria-hidden="true" tabindex="-1">#</a>What you get</h2>
+<ul>
+<li><strong>Generated inputs:</strong> boundary-biased (one argument draw in four comes from the edges of its type), with correlated multi-argument draws that reach bugs like <code>amount == balance + 1</code>.</li>
+<li><strong>Small counterexamples:</strong> an exact sweep of the 256 smallest values, greedy descent and joint moves. The guarantee is a stated local minimum.</li>
+<li><strong>Inputs recovered from panics:</strong> Fe cannot catch an abort. Fuzzloom finds the aborting input by searching on the run count, then shrinks it by replay.</li>
+<li><strong>Effects:</strong> a property can declare <code>uses (ledger: mut Ledger)</code>. Fuzzloom builds each effect from your <code>fixture_*()</code> function, fresh for every input.</li>
+<li><strong>Input ranges:</strong> <code>/// fuzzloom: start in 1668464000..=1700000000</code> restricts one argument everywhere, shrinking included.</li>
+<li><strong>Backend comparison:</strong> <code>diff</code> compares 100,000 inputs on sonatina and native and pins the first difference in 8 <code>fe</code> runs.</li>
+<li><strong>A regression suite:</strong> every failure is a JSON record. <code>replay</code> re-checks them, and <code>fuzz</code> mutates them to find a fix that only handled one input.</li>
+<li><strong>CI output:</strong> exit codes, <code>--json</code> and JUnit XML. Infrastructure problems (compile errors, out of gas) are never reported as findings.</li>
+</ul>
+<h2 id="what-it-does-not-do"><a class="anchor" href="#what-it-does-not-do" aria-hidden="true" tabindex="-1">#</a>What it does not do</h2>
+<ul>
+<li><strong>It does not prove a property.</strong> A passing campaign means 10,000 well-chosen inputs found nothing, and the report says what they exercised.</li>
+<li><strong>No sequences of calls yet.</strong> Each input gets fresh fixtures.</li>
+<li><strong>Limited input types.</strong> Integers and <code>bool</code> only, 1 to 3 arguments per property.</li>
+</ul>
+<h2 id="where-to-go-next"><a class="anchor" href="#where-to-go-next" aria-hidden="true" tabindex="-1">#</a>Where to go next</h2>
+<ul>
+<li><a href="quickstart.html">Quick start</a>: install and run your first property in a few minutes.</li>
+<li><a href="writing-properties.html">Writing properties</a>: the conventions and what can be an argument.</li>
+<li><a href="architecture.html">How it works</a> and <a href="algorithms.html">Algorithms and guarantees</a>, for the full picture.</li>
+</ul>
+
+    </article>
+    <nav class="doc__pager" aria-label="Previous and next page">
+      <span></span>
+      <a class="doc__next" href="quickstart.html"><span>Next</span>Quick start</a>
+    </nav>
+    
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="side__label">On this page</p><ul><li><a href="#what-you-get">What you get</a></li><li><a href="#what-it-does-not-do">What it does not do</a></li><li><a href="#where-to-go-next">Where to go next</a></li></ul>
+  </aside>
+</div>
+<footer class="docs__footer">
+  <div class="wrap"><span>&copy; 2026 Fuzzloom &nbsp; Apache License 2.0</span><span><a href="https://github.com/MikeMoulder/fuzzloom">GitHub</a> &nbsp; <a href="https://www.npmjs.com/package/fuzzloom">npm</a> &nbsp; <a href="../llms-full.txt">llms-full.txt</a></span></div>
+</footer>
+<script type="module" src="../assets/system.js"></script>
+<script type="module" src="../assets/motion/motion.js"></script>
+<script type="module" src="docs.js"></script>
+</body>
+</html>

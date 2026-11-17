@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" data-type="software" data-radius="sharp" data-buttons="tonal" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Differential testing: Fuzzloom docs</title>
+<meta name="description" content="A differential target is a public function whose name starts with diff_ and which returns one of the supported types. It must return the same value on sona">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Differential testing: Fuzzloom docs">
+<meta property="og:image" content="../share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0f1f10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..700&family=Figtree:wght@400..600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/system.css">
+<link rel="stylesheet" href="../assets/motion/motion.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+<header class="nav">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#doc">Skip to content</a>
+    <a class="nav__logo" href="../"><span class="mark" data-mark="dots" aria-hidden="true"></span>Fuzzloom <span class="docs__crumb">Docs</span></a>
+    <nav class="nav__links" aria-label="Main">
+      <div class="nav__item"><a class="nav__link" href="../">Home</a></div>
+      <div class="nav__item"><a class="nav__link" href="cli.html">CLI</a></div>
+      <div class="nav__item"><a class="nav__link" href="../llms.txt">llms.txt</a></div>
+    </nav>
+    <div class="nav__actions">
+      <a class="nav__link" href="https://github.com/MikeMoulder/fuzzloom">GitHub</a>
+      <a class="btn btn--primary" href="quickstart.html">Read the quick start</a>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+<div class="docs__layout wrap">
+  <aside class="side" aria-label="Documentation">
+    <label class="side__search"><span class="sr-only">Find a page</span><input type="search" placeholder="Find a page" data-docs-search></label>
+    <nav>
+        <div class="side__group">
+          <p class="side__label">Getting started</p>
+          <ul><li><a href="index.html">Introduction</a></li><li><a href="quickstart.html">Quick start</a></li><li><a href="installation.html">Installation</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Guides</p>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html" aria-current="page">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Reference</p>
+          <ul><li><a href="configuration.html">Configuration</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="cli.html">CLI reference</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Concepts</p>
+          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li></ul>
+        </div>
+    </nav>
+  </aside>
+  <main class="doc" id="doc">
+    <p class="doc__crumbs"><a href="index.html">Docs</a> / Guides</p>
+    <article class="prose">
+<h1 id="differential-testing">Differential testing</h1>
+<p>A differential target is a public function whose name starts with <code>diff_</code> and which returns one of the supported types. It must return the same value on sonatina and native for every input:</p>
+<div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">pub fn diff_mul_div(_ a: u128, _ b: u128, _ d: u128) -&gt; u256 {
+    if d == 0 { return 0 }
+    (a as u256) * (b as u256) / (d as u256)
+}</code></pre></div>
+<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx fuzzloom diff --seed 7          # 100,000 inputs per target by default</code></pre></div>
+<div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">AGREE   diff_mul_div(u128, u128, u128) -&gt; u256  100000 inputs, identical digests on sonatina and native
+DIVERGE diff_rounding_mode(u64) -&gt; u64  first at input 269, found in 3 search rounds, 8 fe runs in total
+      x = 15398200176277126999
+      sonatina returns 1539820017627712699
+      native   returns 1539820017627712700</code></pre></div>
+<p>Targets may use effects and declared ranges exactly as properties do. <code>diff</code> needs the native backend; <code>doctor</code> tells you whether it is available.</p>
+<p><strong>Choosing targets.</strong> Good candidates are arithmetic helpers, encoding and decoding, rounding, anything with <code>#[cfg(...)]</code> branches, and anything that leans on wrapping or widening casts. Logic that only makes sense inside a deployed contract, such as anything calling <code>Evm</code> effects, does not compile on the native backend and cannot be a differential target.</p>
+<p><strong>What a divergence means.</strong> The two backends computed different values for the same Fe code and the same input. Either the code depends on something backend-specific (<code>#[cfg(target)]</code>, or behaviour your code relies on but the language leaves open), or one backend has a bug. Either way, the input and both outputs are what you need to file it.</p>
+
+    </article>
+    <nav class="doc__pager" aria-label="Previous and next page">
+      <a class="doc__prev" href="ranges.html"><span>Previous</span>Input ranges</a>
+      <a class="doc__next" href="saved-failures.html"><span>Next</span>Saved failures</a>
+    </nav>
+    <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/guide.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    
+  </aside>
+</div>
+<footer class="docs__footer">
+  <div class="wrap"><span>&copy; 2026 Fuzzloom &nbsp; Apache License 2.0</span><span><a href="https://github.com/MikeMoulder/fuzzloom">GitHub</a> &nbsp; <a href="https://www.npmjs.com/package/fuzzloom">npm</a> &nbsp; <a href="../llms-full.txt">llms-full.txt</a></span></div>
+</footer>
+<script type="module" src="../assets/system.js"></script>
+<script type="module" src="../assets/motion/motion.js"></script>
+<script type="module" src="docs.js"></script>
+</body>
+</html>

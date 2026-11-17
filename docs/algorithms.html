@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en" data-type="software" data-radius="sharp" data-buttons="tonal" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Algorithms and guarantees: Fuzzloom docs</title>
+<meta name="description" content="Every non-trivial algorithm in Fuzzloom states what it guarantees and where it stops, and has a test that fails if the guarantee breaks. This page collects">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Algorithms and guarantees: Fuzzloom docs">
+<meta property="og:image" content="../share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0f1f10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..700&family=Figtree:wght@400..600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/system.css">
+<link rel="stylesheet" href="../assets/motion/motion.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+<header class="nav">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#doc">Skip to content</a>
+    <a class="nav__logo" href="../"><span class="mark" data-mark="dots" aria-hidden="true"></span>Fuzzloom <span class="docs__crumb">Docs</span></a>
+    <nav class="nav__links" aria-label="Main">
+      <div class="nav__item"><a class="nav__link" href="../">Home</a></div>
+      <div class="nav__item"><a class="nav__link" href="cli.html">CLI</a></div>
+      <div class="nav__item"><a class="nav__link" href="../llms.txt">llms.txt</a></div>
+    </nav>
+    <div class="nav__actions">
+      <a class="nav__link" href="https://github.com/MikeMoulder/fuzzloom">GitHub</a>
+      <a class="btn btn--primary" href="quickstart.html">Read the quick start</a>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+<div class="docs__layout wrap">
+  <aside class="side" aria-label="Documentation">
+    <label class="side__search"><span class="sr-only">Find a page</span><input type="search" placeholder="Find a page" data-docs-search></label>
+    <nav>
+        <div class="side__group">
+          <p class="side__label">Getting started</p>
+          <ul><li><a href="index.html">Introduction</a></li><li><a href="quickstart.html">Quick start</a></li><li><a href="installation.html">Installation</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Guides</p>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Reference</p>
+          <ul><li><a href="configuration.html">Configuration</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="cli.html">CLI reference</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Concepts</p>
+          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html" aria-current="page">Algorithms and guarantees</a></li></ul>
+        </div>
+    </nav>
+  </aside>
+  <main class="doc" id="doc">
+    <p class="doc__crumbs"><a href="index.html">Docs</a> / Concepts</p>
+    <article class="prose">
+<h1 id="algorithms-and-their-guarantees">Algorithms and their guarantees</h1>
+<p>Every non-trivial algorithm in Fuzzloom states what it guarantees and where it stops, and has a test that fails if the guarantee breaks. This page collects them. Each section names its source and the tests that enforce it. Fe tests run on both the sonatina (EVM) and native backends; CLI tests run under Node.</p>
+<ol>
+<li><a href="#1-random-numbers">Random numbers</a></li>
+<li><a href="#2-input-encoding">Input encoding</a></li>
+<li><a href="#3-input-generation">Input generation</a></li>
+<li><a href="#4-shrinking-inside-fe">Shrinking inside Fe</a></li>
+<li><a href="#5-recovering-the-input-of-an-abort">Recovering the input of an abort</a></li>
+<li><a href="#6-shrinking-by-replay">Shrinking by replay</a></li>
+<li><a href="#7-differential-digests-and-checkpoints">Differential digests and checkpoints</a></li>
+<li><a href="#8-mutation-around-saved-failures">Mutation around saved failures</a></li>
+<li><a href="#9-choosing-the-search-width">Choosing the search width</a></li>
+<li><a href="#10-classifying-outcomes">Classifying outcomes</a></li>
+</ol>
+<h2 id="1-random-numbers"><a class="anchor" href="#1-random-numbers" aria-hidden="true" tabindex="-1">#</a>1. Random numbers</h2>
+<p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/rng.fe" rel="noopener"><code>ingots/fuzzloom/src/rng.fe</code></a></p>
+<p><strong>Generator.</strong> xorshift64* (Vigna, 2014): one 64-bit state word, shifts and one multiplication. It is small and fast on both backends, and fully specified in the source, so a seed replays the same stream everywhere. A zero seed is remapped so the state is never stuck at zero.</p>
+<p><strong>Per-property seeds.</strong> <code>derive_seed(base, id) = splitmix64(base ^ splitmix64(id))</code>, where the CLI passes the 64-bit FNV-1a hash of the property name as <code>id</code>. Without this, every property in a run would draw the same stream and share its blind spots. A mutation campaign derives its seed from the property name together with the saved input.</p>
+<p><strong>Uniform ranges.</strong> <code>below_or_eq(max)</code> draws uniformly from <code>0..=max</code> by masked rejection sampling. It draws a value of <code>bit_len(max)</code> bits and accepts it when it is at most <code>max</code>, otherwise draws again. Each draw succeeds with probability above 1/2, so the expected number of draws is below 2. A full-width maximum such as <code>2^256 - 1</code> takes the mask path and never rejects. Maxima below 2^64 use one 64-bit draw per attempt.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Same seed, same stream; different seeds diverge; a zero seed is not stuck</td>
+<td><code>same_seed_same_stream</code>, <code>different_seeds_diverge</code>, <code>zero_seed_is_not_stuck</code></td>
+</tr>
+<tr>
+<td>The stream matches a recorded reference</td>
+<td><code>known_answer_vector</code>, <code>splitmix64_matches_reference_vectors</code></td>
+</tr>
+<tr>
+<td>No modulo bias. A range of about 2/3 of 2^256 is sampled uniformly, where reduction modulo <code>max + 1</code> would favour the lower third</td>
+<td><code>below_or_eq_is_unbiased_for_non_power_of_two_ranges</code></td>
+</tr>
+<tr>
+<td>Results never exceed <code>max</code>, including full-width maxima</td>
+<td><code>below_or_eq_respects_bound</code>, <code>below_or_eq_handles_full_width_maxima</code>, <code>full_width_maxima_use_the_exact_mask_path</code></td>
+</tr>
+<tr>
+<td>Derived seeds differ per property and per base seed</td>
+<td><code>derived_seeds_differ_per_property_and_base</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Limit:</strong> not cryptographic. That is fine for test generation and wrong for anything else.</p>
+<h2 id="2-input-encoding"><a class="anchor" href="#2-input-encoding" aria-hidden="true" tabindex="-1">#</a>2. Input encoding</h2>
+<p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/word.fe" rel="noopener"><code>word.fe</code></a>, <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/input.fe" rel="noopener"><code>input.fe</code></a></p>
+<p>Generation, shrinking, payloads and records all work on <code>u256</code> words, so one generic runner serves every type. Unsigned integers map to themselves and <code>bool</code> maps to 0 and 1. Signed integers use <strong>zigzag</strong> encoding: 0, -1, 1, -2, 2 map to words 0, 1, 2, 3, 4. Word order then follows magnitude, so shrinking toward word 0 shrinks toward zero from both sides. The generic range edges also land on the signed edges: the top word is <code>MIN</code>, and the word below it is <code>MAX</code>.</p>
+<p>An input is up to three words. Words past the property&#39;s arity are always zero. <code>Bounds</code> gives every argument an inclusive word range, and its lower end is also the shrink floor.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Every type round-trips at its maximum; every <code>i8</code> round-trips</td>
+<td><code>round_trips_at_the_type_maximum</code>, <code>signed_round_trip_every_i8</code>, <code>signed_round_trip_wide_values</code></td>
+</tr>
+<tr>
+<td>Zigzag order is magnitude order; extremes sit at the top words</td>
+<td><code>zigzag_orders_by_magnitude</code>, <code>zigzag_extremes_sit_at_the_top_words</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Consequence:</strong> a contiguous signed range is only expressible as a contiguous word range when it is centred on zero. That is why <code>/// fuzzloom:</code> annotations on signed arguments must be <code>-k..=k</code> or <code>-(k+1)..=k</code>.</p>
+<h2 id="3-input-generation"><a class="anchor" href="#3-input-generation" aria-hidden="true" tabindex="-1">#</a>3. Input generation</h2>
+<p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/gen.fe" rel="noopener"><code>gen.fe</code></a>, <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/bias.fe" rel="noopener"><code>bias.fe</code></a>, <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/draw.fe" rel="noopener"><code>draw.fe</code></a></p>
+<p><strong>Boundary bias.</strong> Defects cluster at edges, so one argument draw in four (<code>Biased::of</code>, <code>every: 4</code>) comes from the edge table instead of the uniform range: <code>lo</code>, <code>hi</code>, <code>lo + 1</code>, <code>hi - 1</code>, the midpoint, and <code>lo + 2^k - 1</code>, <code>lo + 2^k</code>, <code>lo + 2^k + 1</code> for a random <code>k</code> that keeps the value in range.</p>
+<p><strong>Correlation.</strong> For two or more arguments, one draw in eight (<code>CORRELATE_EVERY</code>) sets argument 1 to argument 0, one above it, or one below it. If that value does not fit argument 1&#39;s bounds, the inverse relation is applied to argument 0 instead, so arguments of very different widths still correlate. Whole bug classes live on that diagonal: transfer to self, <code>amount == balance</code>, off-by-one between two inputs. Two independent 128-bit draws essentially never land on it.</p>
+<p><strong>Determinism.</strong> The input at iteration <code>i</code> is a pure function of (bounds, arity, seed, i). Every campaign, every recovery and every digest draws through the same <code>draw</code> function.</p>
+<p><strong>Statistics.</strong> A passing campaign reports how many argument draws were edge values, how many inputs were correlated, and a bitmask of which argument bounds were reached. A pass is therefore a measured claim, not just a run count.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Every draw respects every argument&#39;s bounds; unused words stay zero</td>
+<td><code>draws_respect_bounds_per_argument</code>, <code>unused_arguments_stay_zero</code>, <code>edges_stay_in_range</code></td>
+</tr>
+<tr>
+<td>Edges reach full-width extremes, and bias finds the top of <code>u64</code> far more often than uniform draws</td>
+<td><code>edges_hit_full_width_extremes</code>, <code>biased_finds_top_of_u64_far_more_than_uniform</code></td>
+</tr>
+<tr>
+<td>Correlation hits the diagonal, including across widths, and finds off-by-one bugs</td>
+<td><code>correlation_hits_the_diagonal_of_wide_arguments</code>, <code>correlation_works_across_argument_widths</code>, <code>correlated_generation_finds_off_by_one_between_arguments</code></td>
+</tr>
+<tr>
+<td><code>generated_at(i)</code> reproduces the stream; tracking statistics does not change it</td>
+<td><code>generated_at_replays_the_stream</code>, <code>tracking_does_not_change_the_stream</code></td>
+</tr>
+<tr>
+<td>The statistics measure what was exercised</td>
+<td><code>stats_measure_what_the_campaign_exercised</code>, <code>passing_campaign_reports_what_it_exercised</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Limit:</strong> the edge table is a fixed set of patterns, not learned from the code under test. Only the first two arguments are correlated.</p>
+<h2 id="4-shrinking-inside-fe"><a class="anchor" href="#4-shrinking-inside-fe" aria-hidden="true" tabindex="-1">#</a>4. Shrinking inside Fe</h2>
+<p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/shrink.fe" rel="noopener"><code>shrink.fe</code></a></p>
+<p>When a property returns <code>false</code>, the campaign shrinks the failing input in the same test, within a budget of 5,000 evaluations (<code>SHRINK_BUDGET</code>).</p>
+<p><strong>One argument</strong>, in two phases, neither needing the failure to be monotone:</p>
+<ol>
+<li><strong>Sweep:</strong> try <code>lo, lo + 1, ..., lo + 255</code> (<code>SWEEP = 256</code>) and take the first that fails. Small counterexamples are the most readable, and this finds them exactly.</li>
+<li><strong>Greedy descent:</strong> from the best failing word, try the floor, then <code>best - 2^k</code> for <code>k</code> from the top bit of the distance down to 0. The first candidate that still fails becomes the new best, and the scan restarts. Exact powers of two matter. Steps of <code>best / 2^j</code> can all share a parity, which under zigzag means they all share a sign, and the descent would stall on the first input.</li>
+</ol>
+<p><strong>Several arguments</strong>, in rounds until a round changes nothing. Each round shrinks one coordinate at a time with the others fixed. It then tries three <strong>joint moves</strong>:</p>
+<ul>
+<li>all arguments to the floor;</li>
+<li>all distances divided by their gcd, or halved;</li>
+<li>all lowered by the same <code>2^k</code>.</li>
+</ul>
+<p>Joint moves escape relations such as <code>a == b</code>, <code>b == a + 1</code> and <code>b == 2a</code>, where every single-coordinate move passes.</p>
+<p><strong>Guarantee, when <code>complete</code> is true:</strong> the result fails, and none of these passes, so the result is a local minimum under those moves:</p>
+<ul>
+<li>replacing one argument&#39;s word <code>w_i</code> by <code>w_i - 2^k &gt;= lo_i</code>, with the others fixed;</li>
+<li>lowering every argument by the same <code>2^k</code>;</li>
+<li>dividing every distance by the gcd or by 2.</li>
+</ul>
+<p>When the budget runs out, <code>complete</code> is false and the result is the best failing input found, which still fails.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A threshold failure shrinks to the exact threshold; everything-fails shrinks to the floor</td>
+<td><code>shrinks_threshold_failure_to_the_threshold</code>, <code>shrinks_to_floor_when_everything_fails</code></td>
+</tr>
+<tr>
+<td>Non-monotone failures are handled; a passing value is never returned</td>
+<td><code>handles_non_monotone_failures</code>, <code>never_returns_a_passing_value</code></td>
+</tr>
+<tr>
+<td>A complete result is a verified local minimum, checked by trying every move</td>
+<td><code>complete_result_is_a_verified_local_minimum</code>, <code>three_argument_result_is_a_coordinate_wise_local_minimum</code>, <code>complete_result_is_minimal_under_scaling_moves</code></td>
+</tr>
+<tr>
+<td>Joint moves escape diagonals and proportional relations</td>
+<td><code>joint_move_escapes_a_diagonal</code>, <code>proportional_relations_shrink_to_smallest_ratio</code></td>
+</tr>
+<tr>
+<td>The budget is respected; power-of-two steps cross parity (sign)</td>
+<td><code>respects_budget</code>, <code>power_of_two_steps_cross_parity</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Limit:</strong> a local minimum, not necessarily the global one.</p>
+<h2 id="5-recovering-the-input-of-an-abort"><a class="anchor" href="#5-recovering-the-input-of-an-abort" aria-hidden="true" tabindex="-1">#</a>5. Recovering the input of an abort</h2>
+<p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/check.fe" rel="noopener"><code>check.fe</code></a>, <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/packages/cli/src/engine.ts" rel="noopener"><code>packages/cli/src/engine.ts</code></a> (<code>recoverAbort</code>, <code>searchFirst</code>)</p>
+<p>Fe cannot catch a panic or a revert. A property that overflows or divides by zero ends the test with a raw <code>Panic</code> payload and no input. Fuzzloom recovers the input anyway.</p>
+<p><strong>Prefix consistency.</strong> The campaign stream is deterministic and the campaign stops at its first failure. So a campaign of <code>k</code> runs aborts exactly when <code>k</code> is past the first aborting iteration. It cannot instead return a counterexample: the first failing input and its shrink are the same for every such <code>k</code>, so that shrink would abort too. &quot;Aborts at <code>k</code> runs&quot; is therefore false, then true, as <code>k</code> grows.</p>
+<p><strong>k-ary search.</strong> <code>searchFirst(lo, hi, width, probe)</code> finds the smallest <code>k</code> with a monotone predicate known true at <code>hi</code>. Each round probes up to <code>width</code> run counts in one batched <code>fe</code> run. The probes form the arithmetic progression <code>hi - s, hi - 2s, ...</code> with <code>s = floor((hi - lo) / (width + 1)) + 1</code>. Every gap between probes, and the gap below the lowest, then holds at most <code>floor((hi - lo) / (width + 1))</code> undecided values.</p>
+<p><strong>Guarantee:</strong> the exact smallest aborting run count, in at most <code>ceil(log_(width+1)(runs))</code> rounds. One more round asks for <code>input_at(iteration)</code>, which evaluates nothing and cannot abort, and <code>replay_at(iteration)</code> together. An abort from the replay means the property itself aborts on that input. A plain <code>false</code> means the property fails normally and the in-Fe shrinker hit an aborting candidate. Both cases are reported as such.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Failures are prefix-consistent in the campaign (and in mutation campaigns)</td>
+<td><code>prefix_consistent_failures</code>, <code>mutation_campaign_failures_are_prefix_consistent</code></td>
+</tr>
+<tr>
+<td><code>generated_at</code> recovers the failing input</td>
+<td><code>generated_at_recovers_the_failing_input</code></td>
+</tr>
+<tr>
+<td><code>searchFirst</code> returns the exact minimum within the round bound, swept over widths 1, 2, 7, 21 and 64, sizes up to 10,000 and dense answer positions</td>
+<td>CLI: <code>searchFirst finds the exact minimum within the stated round bound</code></td>
+</tr>
+<tr>
+<td>The probes are evenly spaced and every gap meets the bound</td>
+<td>CLI: <code>probePoints is an evenly spaced progression whose gaps meet the roundsFor bound</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Limit:</strong> the property must be deterministic. Fixtures make effectful properties deterministic by building fresh state for every evaluation.</p>
+<h2 id="6-shrinking-by-replay"><a class="anchor" href="#6-shrinking-by-replay" aria-hidden="true" tabindex="-1">#</a>6. Shrinking by replay</h2>
+<p><strong>Source:</strong> <code>shrinkByReplay</code>, <code>shrinkCandidates</code>, <code>jointCandidates</code> in <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/packages/cli/src/engine.ts" rel="noopener"><code>engine.ts</code></a></p>
+<p>An aborting input cannot be shrunk inside Fe, because the abort ends the test. The CLI shrinks it by replaying candidates, all of one round in a single <code>fe</code> run. Candidates act on each argument&#39;s distance from its floor: the lower end of a declared range, else 0.</p>
+<ul>
+<li><strong>Single moves:</strong> set one argument&#39;s distance to 0, or shift it right by 1, 2, 4, 8, and so on.</li>
+<li><strong>Joint moves</strong>, offered when at least two distances are nonzero:<ul>
+<li>set every distance to 0;</li>
+<li>divide every distance by their gcd <code>g</code>, and by each of 2, 3, 5 and 7 that divides <code>g</code>, or halve them all when <code>g</code> is 1;</li>
+<li>subtract the same <code>d</code> from every distance, for <code>d</code> in <code>m</code>, 1, <code>m &gt;&gt; s</code> and <code>m - (m &gt;&gt; s)</code>, where <code>m</code> is the smallest distance.</li>
+</ul>
+</li>
+</ul>
+<p>Each round accepts the reproducing candidate with the fewest total bits, then the smallest sum. &quot;Reproducing&quot; demands the same failure: the same panic code or revert message for an abort. Shrinking therefore cannot slide onto a different bug.</p>
+<p><strong>Guarantee, when complete:</strong> no candidate move from the result reproduces, which makes it a local minimum under those moves. No candidate ever leaves the declared range. At most 8 rounds by default.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>The result is a local minimum, checked by enumerating every move</td>
+<td>CLI: <code>reaches the stated local minimum and never accepts a non-reproducing candidate</code></td>
+</tr>
+<tr>
+<td>Diagonal (<code>b == a + 1</code>) and proportional (<code>b == 2a</code>) failures that stall single moves are walked down</td>
+<td>CLI: <code>joint moves walk a diagonal failure ...</code>, <code>joint moves follow a proportional failure ...</code></td>
+</tr>
+<tr>
+<td>The documented limit: <code>(96, 192)</code> for <code>b == 2a, a &gt;= 3</code> ends at <code>(4, 8)</code>, a local minimum, not the global <code>(3, 6)</code></td>
+<td>CLI: same test</td>
+</tr>
+<tr>
+<td>No candidate goes below a declared floor</td>
+<td>CLI: <code>replay shrinking never leaves the declared range</code></td>
+</tr>
+</tbody></table>
+</div>
+<h2 id="7-differential-digests-and-checkpoints"><a class="anchor" href="#7-differential-digests-and-checkpoints" aria-hidden="true" tabindex="-1">#</a>7. Differential digests and checkpoints</h2>
+<p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/diff.fe" rel="noopener"><code>diff.fe</code></a>, <code>runDiffs</code> and <code>localiseDivergence</code> in <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/packages/cli/src/engine.ts" rel="noopener"><code>engine.ts</code></a></p>
+<p><strong>Digest.</strong> <code>fold(acc, out) = ((acc ^ out) * 0x100000001B3 + 0xCBF29CE484222325) mod 2^256</code>, starting from the offset, over a target&#39;s outputs on the campaign stream. The fold is order-sensitive, so the digest after <code>k</code> inputs is the same whatever the total run count. That makes &quot;digests differ after <code>k</code> inputs&quot; monotone in <code>k</code>.</p>
+<p><strong>Checkpoints.</strong> <code>checkpoints_within(t, bounds, seed, first, step, count)</code> folds once. It returns the digest after <code>first + j * step</code> inputs for every <code>j &lt; count</code> (at most 256), as a <code>DynArray&lt;u256&gt;</code> payload. Fixed-size arrays are not allowed in Fe custom errors, so the payload uses <code>DynArray</code>, built with <code>MemVec</code>, which encodes identically on both backends.</p>
+<p><strong>Search.</strong> The first round asks each target for checkpoints at the first search round&#39;s probes, plus the full run count. If every checkpoint matches, the target agrees. Any mismatch is a proven divergence, so a fold collision at the final digest cannot hide one. Later rounds use the same arithmetic-progression probes as section 5, so one checkpoint test answers a whole round. A final round regenerates the first diverging input and evaluates it on both backends.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Each checkpoint equals the digest at its run count exactly</td>
+<td><code>every_checkpoint_equals_the_digest_at_its_run_count</code></td>
+</tr>
+<tr>
+<td>Checkpoints agree before the first differing output and differ from it on</td>
+<td><code>checkpoints_locate_the_first_differing_output</code></td>
+</tr>
+<tr>
+<td>The digest is the fold of exactly the generated inputs</td>
+<td><code>digest_is_the_fold_of_the_generated_inputs</code></td>
+</tr>
+<tr>
+<td>A single differing output changes the digest; seed and run count matter</td>
+<td><code>digest_detects_a_single_differing_output</code>, <code>digest_depends_on_seed_and_runs</code></td>
+</tr>
+<tr>
+<td>Both backends compute the same fold, generator and PRNG: one recorded constant checked on each</td>
+<td><code>known_answer_digest_matches_on_every_backend</code></td>
+</tr>
+<tr>
+<td>The real <code>Checkpoints</code> payload decodes and matches separate digest tests on both backends</td>
+<td>CLI: <code>integration: real checkpoints equal separate digests, on both backends</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Limit:</strong> the fold is a checksum, not a cryptographic hash. It detects a single differing output with overwhelming probability, but it is not designed against an adversary.</p>
+<h2 id="8-mutation-around-saved-failures"><a class="anchor" href="#8-mutation-around-saved-failures" aria-hidden="true" tabindex="-1">#</a>8. Mutation around saved failures</h2>
+<p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/mutate.fe" rel="noopener"><code>mutate.fe</code></a></p>
+<p>A mutation campaign explores the neighbourhood of one saved input instead of the whole input space. Each mutant starts from the saved input, clamped into bounds, and stacks 1 to 4 operators (<code>MAX_STACK</code>):</p>
+<ul>
+<li>a small step up or down;</li>
+<li>a single bit flip;</li>
+<li>an edge value;</li>
+<li>halving or doubling the distance from the floor;</li>
+<li>a copy of another argument, plus or minus one;</li>
+<li>a fresh uniform draw.</li>
+</ul>
+<p>Mutants never accumulate, so every one stays near the saved input. <code>fuzz</code> adds one mutation campaign per saved failure, up to 8 per property, to its first round.</p>
+<p><strong>Why:</strong> after a fix, the exact saved input passes. A fix that special-cases only that input leaves its neighbours failing. A fresh campaign almost never lands there again; a mutation campaign does.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Every mutant is within bounds, even from a corpus outside them; words past the arity stay zero</td>
+<td><code>mutants_stay_within_bounds</code>, <code>arguments_past_arity_stay_zero</code></td>
+</tr>
+<tr>
+<td><code>mutated_at(i)</code> reproduces the stream, and failures are prefix-consistent</td>
+<td><code>mutated_at_reproduces_the_stream</code>, <code>mutation_campaign_failures_are_prefix_consistent</code></td>
+</tr>
+<tr>
+<td>It finds a 7-value incomplete-fix window around a <code>u256</code> corpus that a fresh 2,000-run campaign misses</td>
+<td><code>mutation_finds_an_incomplete_fix_that_fresh_campaigns_miss</code></td>
+</tr>
+<tr>
+<td>The copy operator reaches correlated neighbours</td>
+<td><code>copy_operator_reaches_correlated_neighbours</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Limit:</strong> value-level operators only, with no dictionary of constants taken from the code under test. A seed uses the shrunk input, not the original.</p>
+<h2 id="9-choosing-the-search-width"><a class="anchor" href="#9-choosing-the-search-width" aria-hidden="true" tabindex="-1">#</a>9. Choosing the search width</h2>
+<p><strong>Source:</strong> <code>chooseWidth</code>, <code>roundsFor</code> in <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/packages/cli/src/engine.ts" rel="noopener"><code>engine.ts</code></a></p>
+<p>Every <code>fe test</code> invocation compiles its ingot once, about 2.4 s idle (<code>COMPILE_MS</code>), and each additional test costs about 85 ms (<code>CASE_MS</code>). <code>roundsFor(u, k)</code> is the worst-case number of rounds for <code>u</code> undecided values at width <code>k</code>. <code>chooseWidth</code> picks the <code>k</code> that minimises <code>roundsFor(u, k) * (COMPILE_MS + CASE_MS * k)</code>, up to 64. For 10,000 runs that is width 21 and 3 rounds, where plain bisection takes 14 steps. Differential search does not need this trade-off: one checkpoint test answers a whole round at width 256.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Bisection is the width-1 case (14 rounds for 10,000); width 21 needs 3</td>
+<td>CLI: <code>roundsFor and chooseWidth ...</code></td>
+</tr>
+<tr>
+<td>The first differential round fits one checkpoint test and leaves at most 39 of 10,000 run counts</td>
+<td>CLI: <code>the first diff round fits one checkpoint case ...</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Limit:</strong> the constants were measured on one machine. Under load the compile cost grows faster than the per-test cost, which shifts the best width by about 10%.</p>
+<h2 id="10-classifying-outcomes"><a class="anchor" href="#10-classifying-outcomes" aria-hidden="true" tabindex="-1">#</a>10. Classifying outcomes</h2>
+<p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/packages/cli/src/fe.ts" rel="noopener"><code>packages/cli/src/fe.ts</code></a>, <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/packages/cli/src/abi.ts" rel="noopener"><code>abi.ts</code></a></p>
+<p><code>fe test</code> prints <code>PASS|FAIL [time] name</code> per test, in completion order, followed by that test&#39;s revert payload or halt reason. The CLI splits the output per test name and decodes each payload by its selector. Selectors are computed with keccak-256 from the signatures, never hardcoded.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Outcome</th>
+<th>Classified as</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A Fuzzloom payload</td>
+<td>a result</td>
+</tr>
+<tr>
+<td><code>Panic(uint256)</code> or <code>Error(string)</code></td>
+<td>an abort from the user&#39;s code</td>
+</tr>
+<tr>
+<td>An <code>OutOfGas</code> halt</td>
+<td>infrastructure: <code>out-of-gas</code></td>
+</tr>
+<tr>
+<td>A compile error</td>
+<td>infrastructure: <code>compile</code>, applied to every test in that ingot</td>
+</tr>
+<tr>
+<td>No result line for a test, <code>PASS</code> without a payload, an unknown selector, or a truncated payload</td>
+<td>infrastructure: <code>unparsed</code></td>
+</tr>
+<tr>
+<td>A timeout or a missing native backend</td>
+<td>infrastructure: <code>timeout</code>, <code>backend-unavailable</code></td>
+</tr>
+</tbody></table>
+</div>
+<p><strong>Guarantee:</strong> an infrastructure outcome is never reported as a failing property or a backend mismatch, and it stays attached to its own test.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Guarantee</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Per-name parsing in completion order; out-of-gas stays on its own test; a missing name or a payload-less <code>PASS</code> is <code>unparsed</code></td>
+<td>CLI: <code>batch</code> tests in <code>fe.test.ts</code></td>
+</tr>
+<tr>
+<td>A compile error applies to every test</td>
+<td>CLI: <code>batch output with a compile error applies it to every case</code></td>
+</tr>
+<tr>
+<td>A known selector with a truncated body is infrastructure, not a crash</td>
+<td>CLI: <code>a known selector with a truncated body is infra, not a crash</code></td>
+</tr>
+</tbody></table>
+</div>
+
+    </article>
+    <nav class="doc__pager" aria-label="Previous and next page">
+      <a class="doc__prev" href="architecture.html"><span>Previous</span>How it works</a>
+      <span></span>
+    </nav>
+    <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/algorithms.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="side__label">On this page</p><ul><li><a href="#1-random-numbers">1. Random numbers</a></li><li><a href="#2-input-encoding">2. Input encoding</a></li><li><a href="#3-input-generation">3. Input generation</a></li><li><a href="#4-shrinking-inside-fe">4. Shrinking inside Fe</a></li><li><a href="#5-recovering-the-input-of-an-abort">5. Recovering the input of an abort</a></li><li><a href="#6-shrinking-by-replay">6. Shrinking by replay</a></li><li><a href="#7-differential-digests-and-checkpoints">7. Differential digests and checkpoints</a></li><li><a href="#8-mutation-around-saved-failures">8. Mutation around saved failures</a></li><li><a href="#9-choosing-the-search-width">9. Choosing the search width</a></li><li><a href="#10-classifying-outcomes">10. Classifying outcomes</a></li></ul>
+  </aside>
+</div>
+<footer class="docs__footer">
+  <div class="wrap"><span>&copy; 2026 Fuzzloom &nbsp; Apache License 2.0</span><span><a href="https://github.com/MikeMoulder/fuzzloom">GitHub</a> &nbsp; <a href="https://www.npmjs.com/package/fuzzloom">npm</a> &nbsp; <a href="../llms-full.txt">llms-full.txt</a></span></div>
+</footer>
+<script type="module" src="../assets/system.js"></script>
+<script type="module" src="../assets/motion/motion.js"></script>
+<script type="module" src="docs.js"></script>
+</body>
+</html>

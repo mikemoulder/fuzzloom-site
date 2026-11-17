@@ -141,7 +141,9 @@ function render(page) {
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 const desc = (md) => {
-  const para = md.split("\n\n").find((b) => b && !b.startsWith("#") && !b.startsWith("```") && !b.startsWith("|") && !b.startsWith("-") && !b.startsWith("1."));
+  // the first plain paragraph, cut before any list it introduces; a lead-in ending in ":" is skipped
+  const para = md.split("\n\n").map((b) => b.split(/\n(?=[-*] |\d+\. )/)[0].trim())
+    .find((b) => b && !/^(#|```|\||[-*] |\d+\. |>)/.test(b) && !b.endsWith(":"));
   return (para ?? "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/[`*]/g, "").replace(/\s+/g, " ").trim().slice(0, 155);
 };
 

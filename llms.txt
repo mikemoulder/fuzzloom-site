@@ -1,0 +1,40 @@
+# Fuzzloom
+
+> Property-based testing and fuzzing for the Fe language, with EVM (sonatina) and native differential testing. Write a property as a Fe function returning bool; Fuzzloom generates inputs inside Fe, shrinks failures, saves them for replay and compares backends. Install: npx fuzzloom. Requires fe 26.6 and Node 22.18.
+
+Key facts: properties are `pub fn prop_<name>(args) -> bool`, differential targets `pub fn diff_<name>(args) -> T`; arguments are 1 to 3 of u8..u256, i8..i256 or bool; effects come from `pub fn fixture_*() -> T`; ranges from `/// fuzzloom: <arg> in <lo>..=<hi>`. Exit codes: 0 passed, 1 finding, 2 infrastructure error. Fuzzing does not prove a property holds.
+
+
+## Getting started
+
+- [Introduction](docs/index.html): Fuzzloom is property-based testing and fuzzing for the Fe language, with differential testing between Fe's two backends.
+- [Quick start](docs/quickstart.html): From nothing to a shrunk counterexample in five steps.
+- [Installation](docs/installation.html): Fuzzloom needs: - fe 26.6 (feup installs it); - Node 22.18 or newer; - for diff and --backend native, fe's native backend. That backend runs on Linux and m
+
+## Guides
+
+- [Writing properties](docs/writing-properties.html): A property is a public function whose name starts with prop_ and which returns bool. It states something that must be true for every input. Put it anywhere
+- [Reading the results](docs/results.html): fuzz prints one block per property:
+- [Effects and fixtures](docs/effects.html): Fe passes state and context into functions as effects (uses). Fuzzloom supports this pattern directly. For each effect type a target uses, provide a public
+- [Input ranges](docs/ranges.html): By default every argument ranges over its whole type. When a bug only exists in a narrow, meaningful region, declare it with a doc-comment line above the f
+- [Differential testing](docs/differential.html): A differential target is a public function whose name starts with diff_ and which returns one of the supported types. It must return the same value on sona
+- [Saved failures](docs/saved-failures.html): Every FAIL, ABORT and DIVERGE is saved to .fuzzloom/failures/<target>-<hash>.json. The record holds the shrunk input, the original input, the seed, the ite
+- [Running in CI](docs/ci.html): Exit codes make Fuzzloom a normal CI step: 1 fails the build on a finding, and 2 fails it on an infrastructure problem. Pin a seed for a deterministic chec
+- [Writing good properties](docs/good-properties.html): 
+- [The whole guide](docs/guide.html): From a first property to a regression suite in CI. For how Fuzzloom works inside, see architecture.md; for exact guarantees, see algorithms.md.
+
+## Reference
+
+- [Configuration](docs/configuration.html): Everything is a command-line option or an environment variable. There is no config file.
+- [Troubleshooting](docs/troubleshooting.html): INFRA ... out-of-gas. fe test caps each EVM test at 10^9 gas. Lower --runs, simplify the property, or run with --backend native, which has no gas.
+- [CLI reference](docs/cli.html): path is the Fe ingot to work on, a directory with fe.toml and src/. It defaults to the current directory.
+
+## Concepts
+
+- [How it works](docs/architecture.html): Fuzzloom has two halves with a strict split.
+- [Algorithms and guarantees](docs/algorithms.html): Every non-trivial algorithm in Fuzzloom states what it guarantees and where it stops, and has a test that fails if the guarantee breaks. This page collects
+
+## Source
+
+- [Repository](https://github.com/MikeMoulder/fuzzloom): the Fe library (ingots/fuzzloom), the CLI (packages/cli), examples and CI
+- [npm package](https://www.npmjs.com/package/fuzzloom)

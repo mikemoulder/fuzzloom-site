@@ -1,0 +1,1250 @@
+# Fuzzloom documentation (full text)
+
+<!-- docs/index.html -->
+
+# Introduction
+
+Fuzzloom is property-based testing and fuzzing for the [Fe](https://fe-lang.org) language, with differential testing between Fe's two backends.
+
+You write a **property** as an ordinary Fe function that returns `bool`. Fuzzloom generates thousands of inputs for it inside Fe and shrinks every failure to a small counterexample. It saves each failure so you can replay it after the fix. It also runs the same logic on **sonatina (EVM)** and **native**, and pins the first input on which they disagree.
+
+```fe
+/// A withdrawal is allowed only up to the balance.
+pub fn prop_withdraw_never_overdraws(_ balance: u128, _ amount: u128) -> bool {
+    !can_withdraw(balance, amount) || amount <= balance
+}
+```
+
+```text
+$ npx fuzzloom fuzz --seed 7
+FAIL  prop_withdraw_never_overdraws(u128, u128)  counterexample at input 19
+      balance = 0
+      amount  = 1
+      shrunk from 216194592332408381925550103855666662331, 216194592332408381925550103855666662332 in 906 evaluations
+      reproduce: fuzzloom reproduce prop_withdraw_never_overdraws-2c81bbb3
+```
+
+## What you get
+
+- **Generated inputs:** boundary-biased (one argument draw in four comes from the edges of its type), with correlated multi-argument draws that reach bugs like `amount == balance + 1`.
+- **Small counterexamples:** an exact sweep of the 256 smallest values, greedy descent and joint moves. The guarantee is a stated local minimum.
+- **Inputs recovered from panics:** Fe cannot catch an abort. Fuzzloom finds the aborting input by searching on the run count, then shrinks it by replay.
+- **Effects:** a property can declare `uses (ledger: mut Ledger)`. Fuzzloom builds each effect from your `fixture_*()` function, fresh for every input.
+- **Input ranges:** `/// fuzzloom: start in 1668464000..=1700000000` restricts one argument everywhere, shrinking included.
+- **Backend comparison:** `diff` compares 100,000 inputs on sonatina and native and pins the first difference in 8 `fe` runs.
+- **A regression suite:** every failure is a JSON record. `replay` re-checks them, and `fuzz` mutates them to find a fix that only handled one input.
+- **CI output:** exit codes, `--json` and JUnit XML. Infrastructure problems (compile errors, out of gas) are never reported as findings.
+
+## What it does not do
+
+- **It does not prove a property.** A passing campaign means 10,000 well-chosen inputs found nothing, and the report says what they exercised.
+- **No sequences of calls yet.** Each input gets fresh fixtures.
+- **Limited input types.** Integers and `bool` only, 1 to 3 arguments per property.
+
+## Where to go next
+
+- [Quick start](quickstart.html): install and run your first property in a few minutes.
+- [Writing properties](writing-properties.html): the conventions and what can be an argument.
+- [How it works](architecture.html) and [Algorithms and guarantees](algorithms.html), for the full picture.
+
+
+---
+
+<!-- docs/quickstart.html -->
+
+# Quick start
+
+From nothing to a shrunk counterexample in five steps.
+
+## 1. Install fe and Node
+
+You need [fe 26.6](https://fe-lang.org/getting-started/installation/) and Node 22.18 or newer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.6.0
+node --version
+```
+
+`diff` and `--backend native` also need fe's native backend, which runs on Linux and macOS. On Windows, install fe inside WSL as well; Fuzzloom then runs native tests there by itself.
+
+## 2. Check your setup
+
+Run this from inside any Fe ingot (a directory with `fe.toml` and `src/`):
+
+```bash
+npx fuzzloom doctor
+```
+
+```text
+ok    Node              v22.18.0
+ok    fe                fe 26.6.0 (5b3f96a) at /home/you/.fe/bin/fe
+ok    Fe library        .../node_modules/fuzzloom/ingot
+ok    Library compiles  fe check passed
+ok    Native backend    fe 26.6.0 (5b3f96a) in this machine
+warn  Project           ingot my_ingot: 0 prop_* and 0 diff_* functions, 0 skipped
+                        write `pub fn prop_<name>(args) -> bool` (or diff_<name>) in the ingot's src/
+```
+
+The project warning goes away once you write your first property.
+
+## 3. Write a property
+
+Add a public function whose name starts with `prop_` and which returns `bool`, anywhere under `src/`:
+
+```fe
+pub fn fee(_ amount: u64) -> u64 {
+    amount.wrapping_mul(30) / 10000
+}
+
+/// The fee matches exact arithmetic for every amount.
+pub fn prop_fee_matches_exact_math(_ amount: u64) -> bool {
+    let exact: u128 = (amount as u128) * 30 / 10000
+    (fee(amount) as u128) == exact
+}
+```
+
+## 4. Fuzz it
+
+```bash
+npx fuzzloom fuzz --seed 7
+```
+
+```text
+FAIL  prop_fee_matches_exact_math(u64)  counterexample at input 2
+      amount = 614891469123651721
+      shrunk from 4762291152399575021 in 1414 evaluations
+      reproduce: fuzzloom reproduce prop_fee_matches_exact_math-0e05b819
+```
+
+`614891469123651721` is `u64::MAX / 30 + 1`, the smallest amount for which `amount * 30` wraps. The shrinker found the exact threshold. The seed makes the run repeatable; leave it out and Fuzzloom picks one at random and prints it.
+
+## 5. Fix it and replay
+
+Widen before multiplying, then check the saved failure again:
+
+```fe
+pub fn fee(_ amount: u64) -> u64 {
+    ((amount as u128) * 30 / 10000).downcast_truncate()
+}
+```
+
+```bash
+npx fuzzloom replay
+```
+
+```text
+FIXED  prop_fee_matches_exact_math-0e05b819  now passes
+```
+
+Commit `.fuzzloom/failures/`: it is your regression suite. Every later `fuzz` also mutates those saved inputs, to catch a fix that only handles the one input that was saved.
+
+## Next
+
+- [Writing properties](writing-properties.html): types, labels and what gets skipped.
+- [Effects and fixtures](effects.html): properties that use state or context.
+- [Differential testing](differential.html): compare sonatina and native.
+- [Running in CI](ci.html): exit codes and JUnit reports.
+
+
+---
+
+<!-- docs/installation.html -->
+
+# Installation
+
+Fuzzloom needs:
+- [fe 26.6](https://fe-lang.org/getting-started/installation/) (`feup` installs it);
+- Node 22.18 or newer;
+- for `diff` and `--backend native`, fe's native backend. That backend runs on Linux and macOS. On Windows, install fe inside WSL as well, and Fuzzloom runs native tests there automatically.
+
+No install step is needed beyond `npx`:
+
+```bash
+cd my-ingot
+npx fuzzloom doctor
+```
+
+`doctor` checks each requirement and prints a fix for anything missing. It exits 2 if a required piece is missing. A missing native backend is only a warning, because only `diff` and `--backend native` need it.
+
+
+---
+
+<!-- docs/writing-properties.html -->
+
+# Writing properties
+
+A property is a public function whose name starts with `prop_` and which returns `bool`. It states something that must be true for every input. Put it anywhere under your ingot's `src/`:
+
+```fe
+/// Fee charged on `amount`, rounded down: 30 basis points.
+pub fn fee(_ amount: u64) -> u64 {
+    amount.wrapping_mul(30) / 10000
+}
+
+/// The fee matches exact arithmetic for every amount.
+pub fn prop_fee_matches_exact_math(_ amount: u64) -> bool {
+    let exact: u128 = (amount as u128) * 30 / 10000
+    (fee(amount) as u128) == exact
+}
+```
+
+```bash
+npx fuzzloom list            # confirm Fuzzloom sees it
+npx fuzzloom fuzz --seed 7
+```
+
+```text
+FAIL  prop_fee_matches_exact_math(u64)  counterexample at input 2
+      amount = 614891469123651721
+      shrunk from 4762291152399575021 in 1414 evaluations
+      reproduce: fuzzloom reproduce prop_fee_matches_exact_math-0e05b819
+```
+
+`614891469123651721` is `u64::MAX / 30 + 1`, the smallest amount for which `amount * 30` wraps. The shrinker found the exact threshold, not just some large failing value.
+
+**What can be an argument:** 1 to 3 arguments, each `u8`, `u16`, `u32`, `u64`, `u128`, `u256`, `i8`, `i16`, `i32`, `i64`, `i128`, `i256` or `bool`. Arguments may be positional (`_ amount: u64`) or labelled (`amount: u64`). A `prop_` function that does not fit is listed as skipped by `list` and `doctor`, with the reason:
+
+```text
+  skip  prop_addr  src/lib.fe:12  parameter "a" has type Address; supported: u8, u16, ...
+```
+
+
+---
+
+<!-- docs/results.html -->
+
+# Reading the results
+
+## Reading the results
+
+`fuzz` prints one block per property:
+
+| Status | Meaning | What to do |
+|---|---|---|
+| `PASS` | No input failed. The next line says what the campaign exercised: how many argument draws were edge values, how many inputs were correlated, and which argument bounds were reached | Nothing. If a bound was never reached, consider an [input range](#6-restricting-input-ranges) |
+| `FAIL` | The property returned `false`. Shows the shrunk input, the original input and the shrink effort | Fix the code, or the property if the property is wrong |
+| `ABORT` | The property panicked or reverted (overflow, division by zero, an `assert!`). The input was recovered by searching on the run count, then shrunk by replay | Same as `FAIL`. The panic reason is shown, such as `arithmetic overflow or underflow (Panic 0x11)` |
+| `INFRA` | Something outside your property went wrong: a compile error, out of gas, a timeout, a missing backend, unreadable output | See [Troubleshooting](#11-troubleshooting). This is never a finding |
+
+```text
+ABORT prop_share_price_defined(u64, u64)  division or modulo by zero (Panic 0x12)  at input 13
+      total_assets = 0
+      total_supply = 0
+      input recovered by k-ary search on the run count (Fe cannot catch an abort, so the payload carried none)
+      shrunk by replay from 3770623262857372628, 0 in 1 fe runs (7 replays); 6 fe runs in total
+```
+
+A shrink that ran out of budget says `(budget reached, may not be minimal)`. The input shown still fails; it may just not be the smallest.
+
+**Exit codes:** `0` all passed, `1` at least one `FAIL`, `ABORT` or `DIVERGE`, `2` at least one `INFRA`.
+
+## Seeds and reproducibility
+
+Every run has a base seed. Without `--seed`, Fuzzloom picks one at random and prints it (`repeat with --seed 123`). Each property draws from its own stream, derived from the base seed and the property's name. The same seed, runs and code therefore give the same inputs on every machine and on both backends. Renaming a property changes its stream; adding another property does not.
+
+To dig into one failure, `reproduce` replays the saved input directly, without generating anything:
+
+```bash
+npx fuzzloom reproduce prop_fee_matches_exact_math-0e05b819
+```
+
+
+---
+
+<!-- docs/effects.html -->
+
+# Effects and fixtures
+
+Fe passes state and context into functions as effects (`uses`). Fuzzloom supports this pattern directly. For each effect type a target uses, provide a public function whose name starts with `fixture_` and which returns that type:
+
+```fe
+pub struct Ledger { pub alice: u128, pub bob: u128, pub fees: u128 }
+
+pub fn fixture_ledger() -> Ledger {
+    Ledger { alice: 1000000, bob: 0, fees: 0 }
+}
+
+pub fn prop_overdraft_changes_nothing(_ amount: u128) -> bool
+uses (ledger: mut Ledger, policy: FeePolicy) {
+    let alice = ledger.alice
+    if amount <= alice { return true }
+    !transfer(amount, to_bob: true) && ledger.alice == alice
+}
+```
+
+**How the fixture is found.**
+1. Fuzzloom first looks for exactly one `pub fn fixture_*()` that returns the effect's type.
+2. If there is none, it looks for exactly one fixture named after the type in snake case. For `uses (clock: Clock)` that is `fixture_clock`.
+
+The second rule is for **trait** effects. The fixture returns any type that implements the trait:
+
+```fe
+pub trait Clock { fn now(self) -> u64 }
+pub struct FixedClock { pub at: u64 }
+impl Clock for FixedClock { fn now(self) -> u64 { self.at } }
+
+pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
+```
+
+**Fresh state every time.** Every evaluation builds every effect from its fixture again. Evaluations never see each other's changes, so a failure replays exactly, and shrinking compares like with like. A bug that only appears after a particular sequence of calls is therefore out of reach for now; see [what Fuzzloom does not do](../README.md#what-fuzzloom-does-not-do).
+
+**When a target is skipped.** A target whose effect has no fixture, or several, is skipped with the reason:
+
+```text
+  skip  prop_two   src/lib.fe:4  uses L, and more than one fixture builds it (fixture_a, fixture_b)
+  skip  prop_none  src/lib.fe:5  uses Wallet, but the ingot has no `pub fn fixture_wallet() -> Wallet` to build it
+```
+
+**Where the types live.** The effect type must be defined in your ingot, or imported with a `use` line in the file that defines the target. `fuzzloom list` shows what each target uses and which fixture builds it:
+
+```text
+  prop  prop_transfer_conserves_supply(amount: u128, to_bob: bool)  src/lib.fe:54
+        uses mut Ledger <- fixture_ledger(), FeePolicy <- fixture_policy()
+```
+
+
+---
+
+<!-- docs/ranges.html -->
+
+# Input ranges
+
+By default every argument ranges over its whole type. When a bug only exists in a narrow, meaningful region, declare it with a doc-comment line above the function:
+
+```fe
+/// Vesting never releases more than the grant.
+/// fuzzloom: start in 1668464000..=1700000000
+pub fn prop_vested_never_exceeds_total(_ total: u128, start: u64) -> bool uses (clock: Clock) {
+    vested(total, start) <= total
+}
+```
+
+- `..=` includes the upper end and `..` excludes it. Values are written in the argument's type, in decimal or hex, and may contain underscores (`1_000_000`).
+- The range applies everywhere: the campaign, abort recovery, mutation campaigns and differential digests. Shrinking stops at the lower end of the range instead of at zero.
+- **Signed arguments:** the range must be centred on zero, `-k..=k` or `-(k+1)..=k`. Signed values are stored zigzag-encoded (0, -1, 1, -2, 2, ...), and only such ranges are one contiguous block. A range like `10..=20` on an `i64` is rejected with that explanation rather than silently approximated.
+- Any malformed annotation skips the target with the reason, so a typo never widens a range without you noticing:
+
+```text
+  skip  prop_x  src/lib.fe:9  the range of "amount" does not fit u8
+  skip  prop_y  src/lib.fe:14 the annotation names "amout", which is not an argument
+```
+
+In `examples/token-ledger`, this annotation turns a vesting overflow that 10,000 uniform inputs never reach into a failure at the first input.
+
+
+---
+
+<!-- docs/differential.html -->
+
+# Differential testing
+
+A differential target is a public function whose name starts with `diff_` and which returns one of the supported types. It must return the same value on sonatina and native for every input:
+
+```fe
+pub fn diff_mul_div(_ a: u128, _ b: u128, _ d: u128) -> u256 {
+    if d == 0 { return 0 }
+    (a as u256) * (b as u256) / (d as u256)
+}
+```
+
+```bash
+npx fuzzloom diff --seed 7          # 100,000 inputs per target by default
+```
+
+```text
+AGREE   diff_mul_div(u128, u128, u128) -> u256  100000 inputs, identical digests on sonatina and native
+DIVERGE diff_rounding_mode(u64) -> u64  first at input 269, found in 3 search rounds, 8 fe runs in total
+      x = 15398200176277126999
+      sonatina returns 1539820017627712699
+      native   returns 1539820017627712700
+```
+
+Targets may use effects and declared ranges exactly as properties do. `diff` needs the native backend; `doctor` tells you whether it is available.
+
+**Choosing targets.** Good candidates are arithmetic helpers, encoding and decoding, rounding, anything with `#[cfg(...)]` branches, and anything that leans on wrapping or widening casts. Logic that only makes sense inside a deployed contract, such as anything calling `Evm` effects, does not compile on the native backend and cannot be a differential target.
+
+**What a divergence means.** The two backends computed different values for the same Fe code and the same input. Either the code depends on something backend-specific (`#[cfg(target)]`, or behaviour your code relies on but the language leaves open), or one backend has a bug. Either way, the input and both outputs are what you need to file it.
+
+
+---
+
+<!-- docs/saved-failures.html -->
+
+# Saved failures
+
+Every `FAIL`, `ABORT` and `DIVERGE` is saved to `.fuzzloom/failures/<target>-<hash>.json`. The record holds the shrunk input, the original input, the seed, the iteration, the backend and the fe version, plus a human-readable value per argument. **Commit this directory.** It is a regression suite that grows on its own.
+
+```bash
+npx fuzzloom replay                 # re-check every saved failure
+```
+
+```text
+FIXED  prop_withdraw_never_overdraws-2c81bbb3  now passes
+FAILS  prop_fee_matches_exact_math-0e05b819    still fails
+```
+
+`replay` marks a record `fixed` when it passes. A record that was fixed and fails again is reported as `REGRESSED`. `--only <text>` limits replay to records whose target name contains the text.
+
+**Mutation around saved failures.** On every later `fuzz`, each saved property or abort failure (open or fixed, up to the 8 most recent per property) also seeds a **mutation campaign**. The campaign runs thousands of small variations of the saved input: steps, bit flips, edge values, copies between arguments. A fix that only special-cases the saved input is caught there, because its neighbours still fail. A finding from a mutation campaign says which record it came from:
+
+```text
+FAIL  prop_x(u256)  counterexample at mutant 37 of saved failure prop_x-1a2b3c4d
+```
+
+`--no-corpus` turns mutation campaigns off for one run.
+
+
+---
+
+<!-- docs/ci.html -->
+
+# Running in CI
+
+Exit codes make Fuzzloom a normal CI step: `1` fails the build on a finding, and `2` fails it on an infrastructure problem. Pin a seed for a deterministic check, or leave it random to explore further on every run. The seed is printed either way. `--junit` writes a report that test dashboards understand. Findings become `<failure>` and infrastructure problems become `<error>`, so a dashboard never shows out-of-gas as a broken property.
+
+GitHub Actions, on Linux so the native backend is available:
+
+```yaml
+- uses: actions/setup-node@v4
+  with: { node-version: "22" }
+- name: Install Fe
+  run: |
+    curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.6.0
+    echo "$HOME/.fe/bin" >> "$GITHUB_PATH"
+- run: npx -y fuzzloom doctor
+- run: npx -y fuzzloom replay --junit reports/replay.xml     # saved failures stay fixed
+- run: npx -y fuzzloom fuzz --junit reports/fuzz.xml          # new inputs every run
+- run: npx -y fuzzloom diff --junit reports/diff.xml          # sonatina against native
+```
+
+Fuzzloom's own pipeline, [`scripts/ci.sh`](../scripts/ci.sh), is a complete working example. It runs on CircleCI.
+
+
+---
+
+<!-- docs/good-properties.html -->
+
+# Writing good properties
+
+- **State the rule, not an example.** `fee(amount) <= amount` and "exact math agrees" catch whole classes of bugs. `fee(10000) == 30` catches one.
+- **Compare against a reference.** A slow, obviously correct version (wider types, a loop) is the strongest oracle there is. `prop_fee_matches_exact_math` compares against `u128` arithmetic.
+- **Round trips and inverses.** `decode(encode(x)) == x`, `redeem(deposit(x)) <= x`.
+- **Conservation.** A transfer neither creates nor destroys tokens.
+- **Monotonicity.** Depositing more never yields fewer shares; a schedule that started later has vested no more.
+- **Guard preconditions by returning `true`.** If an input is outside the function's contract, `if amount > balance { return true }` keeps it from being reported. Prefer an [input range](#6-restricting-input-ranges) when the region is contiguous, so no runs are wasted.
+- **Let aborts be findings.** A property does not need to catch overflow. An abort is reported with its input recovered, which is usually exactly the bug.
+
+
+---
+
+<!-- docs/guide.html -->
+
+# Fuzzloom guide
+
+From a first property to a regression suite in CI. For how Fuzzloom works inside, see [architecture.md](architecture.md); for exact guarantees, see [algorithms.md](algorithms.md).
+
+1. [Install and check](#1-install-and-check)
+2. [Your first property](#2-your-first-property)
+3. [Reading the results](#3-reading-the-results)
+4. [Seeds and reproducibility](#4-seeds-and-reproducibility)
+5. [Properties with effects](#5-properties-with-effects)
+6. [Restricting input ranges](#6-restricting-input-ranges)
+7. [Differential targets](#7-differential-targets)
+8. [Saved failures as a regression suite](#8-saved-failures-as-a-regression-suite)
+9. [Running in CI](#9-running-in-ci)
+10. [Configuration](#10-configuration)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Writing good properties](#12-writing-good-properties)
+
+## 1. Install and check
+
+Fuzzloom needs:
+- [fe 26.6](https://fe-lang.org/getting-started/installation/) (`feup` installs it);
+- Node 22.18 or newer;
+- for `diff` and `--backend native`, fe's native backend. That backend runs on Linux and macOS. On Windows, install fe inside WSL as well, and Fuzzloom runs native tests there automatically.
+
+No install step is needed beyond `npx`:
+
+```bash
+cd my-ingot
+npx fuzzloom doctor
+```
+
+`doctor` checks each requirement and prints a fix for anything missing. It exits 2 if a required piece is missing. A missing native backend is only a warning, because only `diff` and `--backend native` need it.
+
+## 2. Your first property
+
+A property is a public function whose name starts with `prop_` and which returns `bool`. It states something that must be true for every input. Put it anywhere under your ingot's `src/`:
+
+```fe
+/// Fee charged on `amount`, rounded down: 30 basis points.
+pub fn fee(_ amount: u64) -> u64 {
+    amount.wrapping_mul(30) / 10000
+}
+
+/// The fee matches exact arithmetic for every amount.
+pub fn prop_fee_matches_exact_math(_ amount: u64) -> bool {
+    let exact: u128 = (amount as u128) * 30 / 10000
+    (fee(amount) as u128) == exact
+}
+```
+
+```bash
+npx fuzzloom list            # confirm Fuzzloom sees it
+npx fuzzloom fuzz --seed 7
+```
+
+```text
+FAIL  prop_fee_matches_exact_math(u64)  counterexample at input 2
+      amount = 614891469123651721
+      shrunk from 4762291152399575021 in 1414 evaluations
+      reproduce: fuzzloom reproduce prop_fee_matches_exact_math-0e05b819
+```
+
+`614891469123651721` is `u64::MAX / 30 + 1`, the smallest amount for which `amount * 30` wraps. The shrinker found the exact threshold, not just some large failing value.
+
+**What can be an argument:** 1 to 3 arguments, each `u8`, `u16`, `u32`, `u64`, `u128`, `u256`, `i8`, `i16`, `i32`, `i64`, `i128`, `i256` or `bool`. Arguments may be positional (`_ amount: u64`) or labelled (`amount: u64`). A `prop_` function that does not fit is listed as skipped by `list` and `doctor`, with the reason:
+
+```text
+  skip  prop_addr  src/lib.fe:12  parameter "a" has type Address; supported: u8, u16, ...
+```
+
+## 3. Reading the results
+
+`fuzz` prints one block per property:
+
+| Status | Meaning | What to do |
+|---|---|---|
+| `PASS` | No input failed. The next line says what the campaign exercised: how many argument draws were edge values, how many inputs were correlated, and which argument bounds were reached | Nothing. If a bound was never reached, consider an [input range](#6-restricting-input-ranges) |
+| `FAIL` | The property returned `false`. Shows the shrunk input, the original input and the shrink effort | Fix the code, or the property if the property is wrong |
+| `ABORT` | The property panicked or reverted (overflow, division by zero, an `assert!`). The input was recovered by searching on the run count, then shrunk by replay | Same as `FAIL`. The panic reason is shown, such as `arithmetic overflow or underflow (Panic 0x11)` |
+| `INFRA` | Something outside your property went wrong: a compile error, out of gas, a timeout, a missing backend, unreadable output | See [Troubleshooting](#11-troubleshooting). This is never a finding |
+
+```text
+ABORT prop_share_price_defined(u64, u64)  division or modulo by zero (Panic 0x12)  at input 13
+      total_assets = 0
+      total_supply = 0
+      input recovered by k-ary search on the run count (Fe cannot catch an abort, so the payload carried none)
+      shrunk by replay from 3770623262857372628, 0 in 1 fe runs (7 replays); 6 fe runs in total
+```
+
+A shrink that ran out of budget says `(budget reached, may not be minimal)`. The input shown still fails; it may just not be the smallest.
+
+**Exit codes:** `0` all passed, `1` at least one `FAIL`, `ABORT` or `DIVERGE`, `2` at least one `INFRA`.
+
+## 4. Seeds and reproducibility
+
+Every run has a base seed. Without `--seed`, Fuzzloom picks one at random and prints it (`repeat with --seed 123`). Each property draws from its own stream, derived from the base seed and the property's name. The same seed, runs and code therefore give the same inputs on every machine and on both backends. Renaming a property changes its stream; adding another property does not.
+
+To dig into one failure, `reproduce` replays the saved input directly, without generating anything:
+
+```bash
+npx fuzzloom reproduce prop_fee_matches_exact_math-0e05b819
+```
+
+## 5. Properties with effects
+
+Fe passes state and context into functions as effects (`uses`). Fuzzloom supports this pattern directly. For each effect type a target uses, provide a public function whose name starts with `fixture_` and which returns that type:
+
+```fe
+pub struct Ledger { pub alice: u128, pub bob: u128, pub fees: u128 }
+
+pub fn fixture_ledger() -> Ledger {
+    Ledger { alice: 1000000, bob: 0, fees: 0 }
+}
+
+pub fn prop_overdraft_changes_nothing(_ amount: u128) -> bool
+uses (ledger: mut Ledger, policy: FeePolicy) {
+    let alice = ledger.alice
+    if amount <= alice { return true }
+    !transfer(amount, to_bob: true) && ledger.alice == alice
+}
+```
+
+**How the fixture is found.**
+1. Fuzzloom first looks for exactly one `pub fn fixture_*()` that returns the effect's type.
+2. If there is none, it looks for exactly one fixture named after the type in snake case. For `uses (clock: Clock)` that is `fixture_clock`.
+
+The second rule is for **trait** effects. The fixture returns any type that implements the trait:
+
+```fe
+pub trait Clock { fn now(self) -> u64 }
+pub struct FixedClock { pub at: u64 }
+impl Clock for FixedClock { fn now(self) -> u64 { self.at } }
+
+pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
+```
+
+**Fresh state every time.** Every evaluation builds every effect from its fixture again. Evaluations never see each other's changes, so a failure replays exactly, and shrinking compares like with like. A bug that only appears after a particular sequence of calls is therefore out of reach for now; see [what Fuzzloom does not do](../README.md#what-fuzzloom-does-not-do).
+
+**When a target is skipped.** A target whose effect has no fixture, or several, is skipped with the reason:
+
+```text
+  skip  prop_two   src/lib.fe:4  uses L, and more than one fixture builds it (fixture_a, fixture_b)
+  skip  prop_none  src/lib.fe:5  uses Wallet, but the ingot has no `pub fn fixture_wallet() -> Wallet` to build it
+```
+
+**Where the types live.** The effect type must be defined in your ingot, or imported with a `use` line in the file that defines the target. `fuzzloom list` shows what each target uses and which fixture builds it:
+
+```text
+  prop  prop_transfer_conserves_supply(amount: u128, to_bob: bool)  src/lib.fe:54
+        uses mut Ledger <- fixture_ledger(), FeePolicy <- fixture_policy()
+```
+
+## 6. Restricting input ranges
+
+By default every argument ranges over its whole type. When a bug only exists in a narrow, meaningful region, declare it with a doc-comment line above the function:
+
+```fe
+/// Vesting never releases more than the grant.
+/// fuzzloom: start in 1668464000..=1700000000
+pub fn prop_vested_never_exceeds_total(_ total: u128, start: u64) -> bool uses (clock: Clock) {
+    vested(total, start) <= total
+}
+```
+
+- `..=` includes the upper end and `..` excludes it. Values are written in the argument's type, in decimal or hex, and may contain underscores (`1_000_000`).
+- The range applies everywhere: the campaign, abort recovery, mutation campaigns and differential digests. Shrinking stops at the lower end of the range instead of at zero.
+- **Signed arguments:** the range must be centred on zero, `-k..=k` or `-(k+1)..=k`. Signed values are stored zigzag-encoded (0, -1, 1, -2, 2, ...), and only such ranges are one contiguous block. A range like `10..=20` on an `i64` is rejected with that explanation rather than silently approximated.
+- Any malformed annotation skips the target with the reason, so a typo never widens a range without you noticing:
+
+```text
+  skip  prop_x  src/lib.fe:9  the range of "amount" does not fit u8
+  skip  prop_y  src/lib.fe:14 the annotation names "amout", which is not an argument
+```
+
+In `examples/token-ledger`, this annotation turns a vesting overflow that 10,000 uniform inputs never reach into a failure at the first input.
+
+## 7. Differential targets
+
+A differential target is a public function whose name starts with `diff_` and which returns one of the supported types. It must return the same value on sonatina and native for every input:
+
+```fe
+pub fn diff_mul_div(_ a: u128, _ b: u128, _ d: u128) -> u256 {
+    if d == 0 { return 0 }
+    (a as u256) * (b as u256) / (d as u256)
+}
+```
+
+```bash
+npx fuzzloom diff --seed 7          # 100,000 inputs per target by default
+```
+
+```text
+AGREE   diff_mul_div(u128, u128, u128) -> u256  100000 inputs, identical digests on sonatina and native
+DIVERGE diff_rounding_mode(u64) -> u64  first at input 269, found in 3 search rounds, 8 fe runs in total
+      x = 15398200176277126999
+      sonatina returns 1539820017627712699
+      native   returns 1539820017627712700
+```
+
+Targets may use effects and declared ranges exactly as properties do. `diff` needs the native backend; `doctor` tells you whether it is available.
+
+**Choosing targets.** Good candidates are arithmetic helpers, encoding and decoding, rounding, anything with `#[cfg(...)]` branches, and anything that leans on wrapping or widening casts. Logic that only makes sense inside a deployed contract, such as anything calling `Evm` effects, does not compile on the native backend and cannot be a differential target.
+
+**What a divergence means.** The two backends computed different values for the same Fe code and the same input. Either the code depends on something backend-specific (`#[cfg(target)]`, or behaviour your code relies on but the language leaves open), or one backend has a bug. Either way, the input and both outputs are what you need to file it.
+
+## 8. Saved failures as a regression suite
+
+Every `FAIL`, `ABORT` and `DIVERGE` is saved to `.fuzzloom/failures/<target>-<hash>.json`. The record holds the shrunk input, the original input, the seed, the iteration, the backend and the fe version, plus a human-readable value per argument. **Commit this directory.** It is a regression suite that grows on its own.
+
+```bash
+npx fuzzloom replay                 # re-check every saved failure
+```
+
+```text
+FIXED  prop_withdraw_never_overdraws-2c81bbb3  now passes
+FAILS  prop_fee_matches_exact_math-0e05b819    still fails
+```
+
+`replay` marks a record `fixed` when it passes. A record that was fixed and fails again is reported as `REGRESSED`. `--only <text>` limits replay to records whose target name contains the text.
+
+**Mutation around saved failures.** On every later `fuzz`, each saved property or abort failure (open or fixed, up to the 8 most recent per property) also seeds a **mutation campaign**. The campaign runs thousands of small variations of the saved input: steps, bit flips, edge values, copies between arguments. A fix that only special-cases the saved input is caught there, because its neighbours still fail. A finding from a mutation campaign says which record it came from:
+
+```text
+FAIL  prop_x(u256)  counterexample at mutant 37 of saved failure prop_x-1a2b3c4d
+```
+
+`--no-corpus` turns mutation campaigns off for one run.
+
+## 9. Running in CI
+
+Exit codes make Fuzzloom a normal CI step: `1` fails the build on a finding, and `2` fails it on an infrastructure problem. Pin a seed for a deterministic check, or leave it random to explore further on every run. The seed is printed either way. `--junit` writes a report that test dashboards understand. Findings become `<failure>` and infrastructure problems become `<error>`, so a dashboard never shows out-of-gas as a broken property.
+
+GitHub Actions, on Linux so the native backend is available:
+
+```yaml
+- uses: actions/setup-node@v4
+  with: { node-version: "22" }
+- name: Install Fe
+  run: |
+    curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.6.0
+    echo "$HOME/.fe/bin" >> "$GITHUB_PATH"
+- run: npx -y fuzzloom doctor
+- run: npx -y fuzzloom replay --junit reports/replay.xml     # saved failures stay fixed
+- run: npx -y fuzzloom fuzz --junit reports/fuzz.xml          # new inputs every run
+- run: npx -y fuzzloom diff --junit reports/diff.xml          # sonatina against native
+```
+
+Fuzzloom's own pipeline, [`scripts/ci.sh`](../scripts/ci.sh), is a complete working example. It runs on CircleCI.
+
+## 10. Configuration
+
+Everything is a command-line option or an environment variable. There is no config file.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `FE_BIN` | `~/.fe/bin/fe` (or `fe.exe`), else `fe` on `PATH` | The fe binary for sonatina, and for native on Linux and macOS |
+| `FE_WSL_DISTRO` | the default WSL distro | Windows: the distro that runs native tests |
+| `FE_WSL_BIN` | `~/.fe/bin/fe` | Windows: fe inside WSL |
+| `FUZZLOOM_TIMEOUT_MS` | `600000` | Per `fe` invocation; a run past it is reported as `timeout` |
+| `FUZZLOOM_INGOT` | the bundled copy | Use a different checkout of the Fe library |
+| `NO_COLOR` | unset | Plain output |
+
+## 11. Troubleshooting
+
+**`INFRA ... out-of-gas`.** `fe test` caps each EVM test at 10^9 gas. Lower `--runs`, simplify the property, or run with `--backend native`, which has no gas.
+
+**`INFRA ... compile`.** The generated harness did not compile. The first diagnostic is shown, and the generated ingot is kept in `.fuzzloom/tmp/` with its path printed. Usually the property's ingot itself fails `fe check`, or an effect type is not reachable. Run `npx fuzzloom doctor` and `fe check` on your ingot first.
+
+**`Native backend: fe not runnable in WSL`.** Install fe inside your WSL distro (`feup` works there too), or point `FE_WSL_DISTRO` and `FE_WSL_BIN` at it. Only `diff` and `--backend native` need it.
+
+**A property you wrote is missing from `list`.** It is either not `pub`, not named `prop_`/`diff_`, or skipped. Skipped functions are listed with the reason.
+
+**`fe fmt --check` complains about `.fuzzloom/tmp`.** Generated harnesses are removed at the end of every command, and kept only after an infrastructure error. Delete the directory, or fix the infrastructure error and rerun.
+
+## 12. Writing good properties
+
+- **State the rule, not an example.** `fee(amount) <= amount` and "exact math agrees" catch whole classes of bugs. `fee(10000) == 30` catches one.
+- **Compare against a reference.** A slow, obviously correct version (wider types, a loop) is the strongest oracle there is. `prop_fee_matches_exact_math` compares against `u128` arithmetic.
+- **Round trips and inverses.** `decode(encode(x)) == x`, `redeem(deposit(x)) <= x`.
+- **Conservation.** A transfer neither creates nor destroys tokens.
+- **Monotonicity.** Depositing more never yields fewer shares; a schedule that started later has vested no more.
+- **Guard preconditions by returning `true`.** If an input is outside the function's contract, `if amount > balance { return true }` keeps it from being reported. Prefer an [input range](#6-restricting-input-ranges) when the region is contiguous, so no runs are wasted.
+- **Let aborts be findings.** A property does not need to catch overflow. An abort is reported with its input recovered, which is usually exactly the bug.
+
+
+---
+
+<!-- docs/configuration.html -->
+
+# Configuration
+
+Everything is a command-line option or an environment variable. There is no config file.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `FE_BIN` | `~/.fe/bin/fe` (or `fe.exe`), else `fe` on `PATH` | The fe binary for sonatina, and for native on Linux and macOS |
+| `FE_WSL_DISTRO` | the default WSL distro | Windows: the distro that runs native tests |
+| `FE_WSL_BIN` | `~/.fe/bin/fe` | Windows: fe inside WSL |
+| `FUZZLOOM_TIMEOUT_MS` | `600000` | Per `fe` invocation; a run past it is reported as `timeout` |
+| `FUZZLOOM_INGOT` | the bundled copy | Use a different checkout of the Fe library |
+| `NO_COLOR` | unset | Plain output |
+
+
+---
+
+<!-- docs/troubleshooting.html -->
+
+# Troubleshooting
+
+**`INFRA ... out-of-gas`.** `fe test` caps each EVM test at 10^9 gas. Lower `--runs`, simplify the property, or run with `--backend native`, which has no gas.
+
+**`INFRA ... compile`.** The generated harness did not compile. The first diagnostic is shown, and the generated ingot is kept in `.fuzzloom/tmp/` with its path printed. Usually the property's ingot itself fails `fe check`, or an effect type is not reachable. Run `npx fuzzloom doctor` and `fe check` on your ingot first.
+
+**`Native backend: fe not runnable in WSL`.** Install fe inside your WSL distro (`feup` works there too), or point `FE_WSL_DISTRO` and `FE_WSL_BIN` at it. Only `diff` and `--backend native` need it.
+
+**A property you wrote is missing from `list`.** It is either not `pub`, not named `prop_`/`diff_`, or skipped. Skipped functions are listed with the reason.
+
+**`fe fmt --check` complains about `.fuzzloom/tmp`.** Generated harnesses are removed at the end of every command, and kept only after an infrastructure error. Delete the directory, or fix the infrastructure error and rerun.
+
+
+---
+
+<!-- docs/cli.html -->
+
+# CLI reference
+
+```text
+fuzzloom <command> [path] [options]
+```
+
+`path` is the Fe ingot to work on, a directory with `fe.toml` and `src/`. It defaults to the current directory.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `fuzzloom doctor [path]` | Checks Node, fe and its version, that the bundled Fe library compiles with your fe, the native backend, and the project's targets. Exits 2 if a required piece is missing |
+| `fuzzloom list [path]` | Lists every target with its signature, effects, fixtures and declared ranges, and every skipped function with the reason |
+| `fuzzloom fuzz [path]` | Runs every property campaign, plus one mutation campaign per saved failure, then recovers and shrinks any abort |
+| `fuzzloom diff [path]` | Digests every differential target on sonatina and native and pins the first diverging input |
+| `fuzzloom reproduce <id> [path]` | Replays one saved failure from its stored input, with no random generation |
+| `fuzzloom replay [path]` | Replays every saved failure: `FIXED` when it now passes, `FAILS` when it still fails, `REGRESSED` when a fixed one is back |
+
+## Options
+
+| Option | Meaning |
+|---|---|
+| `--seed <n>` | Base seed. Default: random, printed so the run can be repeated exactly |
+| `--runs <n>` | Inputs per property (default 10,000) or per differential target (default 100,000) |
+| `--backend <b>` | `sonatina` (EVM, the default) or `native` |
+| `--only <text>` | Only targets, or for `replay` saved failures, whose name contains the text |
+| `--no-corpus` | `fuzz` without the mutation campaigns around saved failures |
+| `--json` | Machine-readable output |
+| `--junit <file>` | Also write a JUnit XML report: findings are `<failure>`, infrastructure problems are `<error>` |
+| `-h`, `--help` | The usage text |
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Everything passed |
+| `1` | A property failed or aborted, or the backends diverged |
+| `2` | An infrastructure error: a compile error, out of gas, a timeout, a missing backend or unreadable output. Never a finding |
+
+## Result lines
+
+| Line | Command | Meaning |
+|---|---|---|
+| `PASS` | `fuzz` | No input failed; the next line says what the campaign exercised |
+| `FAIL` | `fuzz` | The property returned `false`; the shrunk and original inputs follow |
+| `ABORT` | `fuzz` | The property panicked or reverted; the recovered and shrunk input follows |
+| `AGREE` | `diff` | Identical digests on both backends |
+| `DIVERGE` | `diff` | The first differing input, with both outputs |
+| `INFRA` | any | Something outside your code went wrong; see [Troubleshooting](troubleshooting.html) |
+
+## Files
+
+| Path | What it holds |
+|---|---|
+| `.fuzzloom/failures/<target>-<hash>.json` | One saved failure: the shrunk and original inputs, seed, iteration, backend and fe version. Commit these |
+| `.fuzzloom/tmp/` | Generated test harnesses. Removed when a command ends, kept only after an infrastructure error |
+
+## Environment
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `FE_BIN` | `~/.fe/bin/fe`, else `fe` on `PATH` | The fe binary |
+| `FE_WSL_DISTRO` | the default distro | Windows: the WSL distro that runs native tests |
+| `FE_WSL_BIN` | `~/.fe/bin/fe` | Windows: fe inside WSL |
+| `FUZZLOOM_TIMEOUT_MS` | `600000` | Per `fe` invocation |
+| `FUZZLOOM_INGOT` | the bundled copy | Use a different checkout of the Fe library |
+| `NO_COLOR` | unset | Plain output |
+
+
+---
+
+<!-- docs/architecture.html -->
+
+# Architecture
+
+Fuzzloom has two halves with a strict split.
+
+- **The Fe library** ([`ingots/fuzzloom`](../ingots/fuzzloom/src)) holds every testing algorithm: random generation, shrinking, mutation and differential digests. It runs inside `fe test`, on whichever backend executes it.
+- **The TypeScript CLI** ([`packages/cli`](../packages/cli/src)) orchestrates. It discovers targets, generates test harnesses, runs `fe`, classifies the output, searches when the library cannot report an input, and stores failures.
+
+The CLI never generates inputs or shrinks anything that Fe can shrink. The only algorithms in TypeScript are the ones that need information Fe cannot hand back: recovering the input of an abort, shrinking by replay, and comparing two backends. Exact guarantees for each algorithm are in [algorithms.md](algorithms.md).
+
+```mermaid
+flowchart TB
+  subgraph CLI["packages/cli"]
+    direction LR
+    DISC["discover.ts<br/>targets, effects,<br/>fixtures, ranges"] --> ENG["engine.ts<br/>rounds and searches"]
+    ENG --> HAR["harness.ts<br/>generated ingots"]
+    ENG --> FE["fe.ts<br/>run and classify"]
+    FE --> ABI["abi.ts<br/>decode payloads"]
+    ENG --> STORE["store.ts<br/>failure records"]
+    ENG --> REP["report.ts, junit.ts<br/>terminal, JSON, JUnit"]
+  end
+  subgraph LIB["ingots/fuzzloom"]
+    direction LR
+    RNG["rng"] --> GEN["gen, bias, draw"]
+    GEN --> CHK["check, property, shrink"]
+    GEN --> MUT["mutate"]
+    GEN --> DIF["diff"]
+    CHK & MUT & DIF --> PAY["payload"]
+  end
+  HAR -. "imports" .-> LIB
+  FE -- "fe test (sonatina)" --> X1["generated ingot"]
+  FE -- "fe test --backend native" --> X2["generated ingot"]
+```
+
+## The Fe library
+
+| Module | Responsibility |
+|---|---|
+| `rng.fe` | xorshift64\* generator, splitmix64 seed derivation, unbiased bounded sampling |
+| `word.fe` | The `Word` trait: every argument type to and from a `u256` word (zigzag for signed) |
+| `input.fe` | `Input` (up to three words) and `Bounds` (an inclusive word range per argument) |
+| `gen.fe`, `bias.fe` | Uniform ranges and boundary-biased edges |
+| `draw.fe` | The campaign input stream: biased per-argument draws plus correlated draws; `generated_at` |
+| `property.fe` | `prop1/2/3` wrappers: any callable returning `bool`, its effect row forwarded |
+| `shrink.fe` | Sweep, greedy descent and joint moves |
+| `check.fe` | Campaigns (`find`, `check`, `check_bounded`), `replay`, `input_at` |
+| `mutate.fe` | Mutation campaigns around a saved input: `check_mutating`, `mutant_at`, `mutated_at` |
+| `diff.fe` | `Target` and `target1/2/3`; digests, checkpoints, `evaluate`, `target_input_at` |
+| `payload.fe` | The `#[error]` structs that carry every result out of Fe |
+
+**Generic over effects.** A property is any `Fn` returning `bool`. The wrappers declare `uses E = F::E`, so a property's effects flow through `check(...)` to the caller, who provides them with `with`. The library therefore never needs to know which effects a user's code has. A generic callable needs `uses F::E` at every level, and the library is written that way throughout.
+
+**Results leave as reverts.** A test function cannot return data to `fe test`, but a revert payload is printed. Every harness entry point (`check`, `replay`, `input_at`, `digest_checkpoints`, `evaluate`, and so on) ends with exactly one `revert_error(...)` of a payload struct. `std::evm::revert_error` works on both backends, and the payload bytes are identical on each; the known-answer digest test checks this.
+
+**Bounded variants.** Each entry point has a `_within` form, or takes `bounds` directly, so a declared input range applies to the campaign, recovery, mutation and digests alike. `target_bounds_of(t)` exists because an associated-function call on a generic type cannot appear in a harness expression in fe 26.6.
+
+## The CLI
+
+### Discovery (`discover.ts`)
+
+Discovery reads every `.fe` file under `src/`, with comments blanked so commented-out code is ignored and line numbers stay right. It matches `pub fn prop_*` and `pub fn diff_*` signatures, including ones that `fe fmt` wrapped across lines. For each match it:
+
+1. parses the parameters and keeps each argument's label: positional (`_ x`), the name, or an explicit label;
+2. parses a `uses (...)` clause into effect types;
+3. reads `/// fuzzloom: <arg> in <lo>..=<hi>` lines directly above the function into word ranges ([`bounds.ts`](../packages/cli/src/bounds.ts));
+4. resolves each effect to exactly one fixture, by return type or else by snake-case name;
+5. computes the Fe import paths for the target, its effect types and its fixtures from the file layout (`src/a/b.fe` is `<ingot>::a::b`).
+
+Anything that cannot be tested is returned as skipped, with the reason.
+
+### Harness generation (`harness.ts`)
+
+A harness is a throwaway ingot under `<your ingot>/.fuzzloom/tmp/<label>-<backend>/`. Its dependencies use relative paths, so the same file works for Windows `fe.exe` and for fe inside WSL. Every case becomes one `#[test]`. For the bounded, effectful vesting property in `examples/token-ledger`:
+
+```fe
+// Generated by the Fuzzloom CLI. Do not edit.
+use fuzzloom::*
+use token_ledger::policy::Clock
+use token_ledger::policy::fixture_clock
+use token_ledger::prop_vested_never_exceeds_total
+
+#[test]
+fn case_0() {
+    check_bounded(prop2(|a0: u128, a1: u64| {
+        var e0 = fixture_clock()
+        with (Clock = e0) { prop_vested_never_exceeds_total(a0, start: a1) }
+    }), bounds: bounds_of(prop2(|a0: u128, a1: u64| {
+        var e0 = fixture_clock()
+        with (Clock = e0) { prop_vested_never_exceeds_total(a0, start: a1) }
+    })).restrict(1, lo: 0x6372bd80, hi: 0x6553f100), seed: derive_seed(7, 0x5f4a556c0d9d1a2c), runs: 10000)
+}
+```
+
+The closure is repeated rather than bound to a variable because Fe closures are not `Copy`. A target without effects is passed directly as a function item (`prop2(prop_withdraw_never_overdraws)`).
+
+Harness modes:
+
+| Mode | Fe entry point | Used for |
+|---|---|---|
+| `check` | `check`, `check_bounded`, `check_mutating(_within)` | A campaign, fresh or around a saved input |
+| `replay` | `replay` | One saved or candidate input |
+| `input_at` | `input_at`, `mutant_at(_within)` | The input at an iteration, without evaluating it |
+| `replay_at` | `replay` of `generated_at` / `mutated_at` | Evaluating that input in the same test |
+| `checkpoints` | `digest_checkpoints(_within)` | Up to 256 prefix digests in one pass |
+| `target_input_at` | `target_input_at(_within)` | The input a digest drew at an iteration |
+| `evaluate`, `evaluate_at` | `evaluate` | One differential output |
+
+### Running fe and classifying (`fe.ts`, `abi.ts`)
+
+`runBatch` runs `fe test --color never [--backend native] <dir>`. On Windows the native backend goes through `wsl -- bash -lc`, with the path translated by `wslpath`. Both backends of a differential round run concurrently. The output is split into one block per `PASS|FAIL [time] name` line, and each block is classified on its own (see [algorithms.md, section 10](algorithms.md#10-classifying-outcomes)). A missing result line is `unparsed`, never a pass. A compile error, which produces no result lines at all, applies to every test in the batch.
+
+Selectors in `abi.ts` are computed with keccak-256 from the signatures, which mirror `payload.fe` field for field. They are never hardcoded, and a test checks them against selectors the Fe compiler actually emitted.
+
+### The engine (`engine.ts`)
+
+The engine thinks in **rounds**. Each `fe test` invocation compiles once, so every evaluation that does not depend on another goes into the same generated ingot.
+
+| Command | Rounds |
+|---|---|
+| `fuzz` | 1 round: every property's campaign, plus one mutation campaign per saved failure. For each abort: k-ary search rounds on the run count, 1 recovery round (`input_at` + `replay_at`), then shrink-by-replay rounds |
+| `diff` | 1 round on each backend at once: 256 checkpoints per target. For each divergence: search rounds of one checkpoint test per backend, then 1 recovery round |
+| `replay`, `reproduce` | 1 round per backend that has records, both at once |
+
+Results are combined per target in a fixed order of precedence:
+1. the fresh campaign's failure, abort or infrastructure outcome;
+2. otherwise, the first mutation campaign that failed, aborted or hit infrastructure;
+3. otherwise, a pass.
+
+### Failure records (`store.ts`)
+
+`.fuzzloom/failures/<target>-<fnv8>.json`, version 1. The id is a hash of the target name and the shrunk input, so finding the same minimal failure again updates the record instead of duplicating it.
+
+```json
+{
+  "version": 1,
+  "id": "prop_withdraw_never_overdraws-2c81bbb3",
+  "kind": "property",
+  "target": "prop_withdraw_never_overdraws",
+  "args": [{ "name": "balance", "type": "u128" }, { "name": "amount", "type": "u128" }],
+  "input": ["0x0", "0x1"],
+  "values": ["0", "1"],
+  "original": ["0xa2a5905cfacdaa5f06766da86b098bbb", "0xa2a5905cfacdaa5f06766da86b098bbc"],
+  "iteration": "18",
+  "base_seed": "7",
+  "runs": "10000",
+  "backend": "sonatina",
+  "fe_version": "fe 26.6.0 (5b3f96a)",
+  "status": "open"
+}
+```
+
+`kind` is `property`, `abort` (with `detail`, the panic reason) or `differential` (backend `both`, with both outputs in `detail`). A record found by a mutation campaign carries `seeded_by`. Records are only ever replayed with their stored input, so they stay valid when the generator changes. `replay` refuses a record whose target changed signature, and says so.
+
+### Reports (`report.ts`, `junit.ts`)
+
+There are three outputs. The terminal output uses colour unless `NO_COLOR` is set or output is not a TTY. `--json` output preserves every field, with bigints as strings. `--junit` writes one test case per property, differential target or saved failure: findings are `<failure>`, infrastructure is `<error>`, and text is escaped, stripped of colour and of characters XML cannot carry.
+
+## Packaging
+
+The npm package `fuzzloom` contains compiled JavaScript (`dist/`), because Node does not strip TypeScript types under `node_modules`. It also contains a copy of the Fe library (`ingot/`), made by the `prepack` script. `libraryIngot()` prefers a repository checkout when running from source, so a stale bundled copy never shadows the live library, and falls back to the bundled copy in an installed package. CI packs the package, installs it into an empty prefix and runs it on a project outside the repo, checking that the bundled library is the one used.
+
+## Constraints that shaped the design
+
+| Constraint (fe 26.6) | Design response |
+|---|---|
+| A test can only report through a revert payload | Every entry point ends with one ABI-encoded `#[error]`; the CLI decodes by selector |
+| Fe cannot catch a panic, so an abort carries no input | A deterministic, prefix-consistent stream, k-ary search on the run count, and shrinking by replay |
+| `fe test` compiles once per invocation | Rounds: every independent case in one generated ingot |
+| Each EVM test is capped at 10^9 gas | Campaign sizes chosen to fit; out-of-gas is classified as infrastructure, never as a finding |
+| The native backend runs on Linux and macOS only | Native runs through WSL on Windows; `doctor` reports its availability |
+| `Evm` effects are a type error on native | Differential testing compares shared logic; effects come from user fixtures |
+| Fixed-size arrays are not allowed in custom errors | Checkpoints use `DynArray<u256>` built from a `MemVec` |
+| Closures are not `Copy` | The harness repeats the closure expression |
+| An `Fn` impl with a forwarded effect row, called through a generic bound, crashes the compiler | The library avoids that shape; reproduction in [`spike/compiler-bugs`](../spike/compiler-bugs/fn-impl-forwarded-effect) |
+
+
+---
+
+<!-- docs/algorithms.html -->
+
+# Algorithms and their guarantees
+
+Every non-trivial algorithm in Fuzzloom states what it guarantees and where it stops, and has a test that fails if the guarantee breaks. This page collects them. Each section names its source and the tests that enforce it. Fe tests run on both the sonatina (EVM) and native backends; CLI tests run under Node.
+
+1. [Random numbers](#1-random-numbers)
+2. [Input encoding](#2-input-encoding)
+3. [Input generation](#3-input-generation)
+4. [Shrinking inside Fe](#4-shrinking-inside-fe)
+5. [Recovering the input of an abort](#5-recovering-the-input-of-an-abort)
+6. [Shrinking by replay](#6-shrinking-by-replay)
+7. [Differential digests and checkpoints](#7-differential-digests-and-checkpoints)
+8. [Mutation around saved failures](#8-mutation-around-saved-failures)
+9. [Choosing the search width](#9-choosing-the-search-width)
+10. [Classifying outcomes](#10-classifying-outcomes)
+
+## 1. Random numbers
+
+**Source:** [`ingots/fuzzloom/src/rng.fe`](../ingots/fuzzloom/src/rng.fe)
+
+**Generator.** xorshift64\* (Vigna, 2014): one 64-bit state word, shifts and one multiplication. It is small and fast on both backends, and fully specified in the source, so a seed replays the same stream everywhere. A zero seed is remapped so the state is never stuck at zero.
+
+**Per-property seeds.** `derive_seed(base, id) = splitmix64(base ^ splitmix64(id))`, where the CLI passes the 64-bit FNV-1a hash of the property name as `id`. Without this, every property in a run would draw the same stream and share its blind spots. A mutation campaign derives its seed from the property name together with the saved input.
+
+**Uniform ranges.** `below_or_eq(max)` draws uniformly from `0..=max` by masked rejection sampling. It draws a value of `bit_len(max)` bits and accepts it when it is at most `max`, otherwise draws again. Each draw succeeds with probability above 1/2, so the expected number of draws is below 2. A full-width maximum such as `2^256 - 1` takes the mask path and never rejects. Maxima below 2^64 use one 64-bit draw per attempt.
+
+| Guarantee | Test |
+|---|---|
+| Same seed, same stream; different seeds diverge; a zero seed is not stuck | `same_seed_same_stream`, `different_seeds_diverge`, `zero_seed_is_not_stuck` |
+| The stream matches a recorded reference | `known_answer_vector`, `splitmix64_matches_reference_vectors` |
+| No modulo bias. A range of about 2/3 of 2^256 is sampled uniformly, where reduction modulo `max + 1` would favour the lower third | `below_or_eq_is_unbiased_for_non_power_of_two_ranges` |
+| Results never exceed `max`, including full-width maxima | `below_or_eq_respects_bound`, `below_or_eq_handles_full_width_maxima`, `full_width_maxima_use_the_exact_mask_path` |
+| Derived seeds differ per property and per base seed | `derived_seeds_differ_per_property_and_base` |
+
+**Limit:** not cryptographic. That is fine for test generation and wrong for anything else.
+
+## 2. Input encoding
+
+**Source:** [`word.fe`](../ingots/fuzzloom/src/word.fe), [`input.fe`](../ingots/fuzzloom/src/input.fe)
+
+Generation, shrinking, payloads and records all work on `u256` words, so one generic runner serves every type. Unsigned integers map to themselves and `bool` maps to 0 and 1. Signed integers use **zigzag** encoding: 0, -1, 1, -2, 2 map to words 0, 1, 2, 3, 4. Word order then follows magnitude, so shrinking toward word 0 shrinks toward zero from both sides. The generic range edges also land on the signed edges: the top word is `MIN`, and the word below it is `MAX`.
+
+An input is up to three words. Words past the property's arity are always zero. `Bounds` gives every argument an inclusive word range, and its lower end is also the shrink floor.
+
+| Guarantee | Test |
+|---|---|
+| Every type round-trips at its maximum; every `i8` round-trips | `round_trips_at_the_type_maximum`, `signed_round_trip_every_i8`, `signed_round_trip_wide_values` |
+| Zigzag order is magnitude order; extremes sit at the top words | `zigzag_orders_by_magnitude`, `zigzag_extremes_sit_at_the_top_words` |
+
+**Consequence:** a contiguous signed range is only expressible as a contiguous word range when it is centred on zero. That is why `/// fuzzloom:` annotations on signed arguments must be `-k..=k` or `-(k+1)..=k`.
+
+## 3. Input generation
+
+**Source:** [`gen.fe`](../ingots/fuzzloom/src/gen.fe), [`bias.fe`](../ingots/fuzzloom/src/bias.fe), [`draw.fe`](../ingots/fuzzloom/src/draw.fe)
+
+**Boundary bias.** Defects cluster at edges, so one argument draw in four (`Biased::of`, `every: 4`) comes from the edge table instead of the uniform range: `lo`, `hi`, `lo + 1`, `hi - 1`, the midpoint, and `lo + 2^k - 1`, `lo + 2^k`, `lo + 2^k + 1` for a random `k` that keeps the value in range.
+
+**Correlation.** For two or more arguments, one draw in eight (`CORRELATE_EVERY`) sets argument 1 to argument 0, one above it, or one below it. If that value does not fit argument 1's bounds, the inverse relation is applied to argument 0 instead, so arguments of very different widths still correlate. Whole bug classes live on that diagonal: transfer to self, `amount == balance`, off-by-one between two inputs. Two independent 128-bit draws essentially never land on it.
+
+**Determinism.** The input at iteration `i` is a pure function of (bounds, arity, seed, i). Every campaign, every recovery and every digest draws through the same `draw` function.
+
+**Statistics.** A passing campaign reports how many argument draws were edge values, how many inputs were correlated, and a bitmask of which argument bounds were reached. A pass is therefore a measured claim, not just a run count.
+
+| Guarantee | Test |
+|---|---|
+| Every draw respects every argument's bounds; unused words stay zero | `draws_respect_bounds_per_argument`, `unused_arguments_stay_zero`, `edges_stay_in_range` |
+| Edges reach full-width extremes, and bias finds the top of `u64` far more often than uniform draws | `edges_hit_full_width_extremes`, `biased_finds_top_of_u64_far_more_than_uniform` |
+| Correlation hits the diagonal, including across widths, and finds off-by-one bugs | `correlation_hits_the_diagonal_of_wide_arguments`, `correlation_works_across_argument_widths`, `correlated_generation_finds_off_by_one_between_arguments` |
+| `generated_at(i)` reproduces the stream; tracking statistics does not change it | `generated_at_replays_the_stream`, `tracking_does_not_change_the_stream` |
+| The statistics measure what was exercised | `stats_measure_what_the_campaign_exercised`, `passing_campaign_reports_what_it_exercised` |
+
+**Limit:** the edge table is a fixed set of patterns, not learned from the code under test. Only the first two arguments are correlated.
+
+## 4. Shrinking inside Fe
+
+**Source:** [`shrink.fe`](../ingots/fuzzloom/src/shrink.fe)
+
+When a property returns `false`, the campaign shrinks the failing input in the same test, within a budget of 5,000 evaluations (`SHRINK_BUDGET`).
+
+**One argument**, in two phases, neither needing the failure to be monotone:
+
+1. **Sweep:** try `lo, lo + 1, ..., lo + 255` (`SWEEP = 256`) and take the first that fails. Small counterexamples are the most readable, and this finds them exactly.
+2. **Greedy descent:** from the best failing word, try the floor, then `best - 2^k` for `k` from the top bit of the distance down to 0. The first candidate that still fails becomes the new best, and the scan restarts. Exact powers of two matter. Steps of `best / 2^j` can all share a parity, which under zigzag means they all share a sign, and the descent would stall on the first input.
+
+**Several arguments**, in rounds until a round changes nothing. Each round shrinks one coordinate at a time with the others fixed. It then tries three **joint moves**:
+- all arguments to the floor;
+- all distances divided by their gcd, or halved;
+- all lowered by the same `2^k`.
+
+Joint moves escape relations such as `a == b`, `b == a + 1` and `b == 2a`, where every single-coordinate move passes.
+
+**Guarantee, when `complete` is true:** the result fails, and none of these passes, so the result is a local minimum under those moves:
+- replacing one argument's word `w_i` by `w_i - 2^k >= lo_i`, with the others fixed;
+- lowering every argument by the same `2^k`;
+- dividing every distance by the gcd or by 2.
+
+When the budget runs out, `complete` is false and the result is the best failing input found, which still fails.
+
+| Guarantee | Test |
+|---|---|
+| A threshold failure shrinks to the exact threshold; everything-fails shrinks to the floor | `shrinks_threshold_failure_to_the_threshold`, `shrinks_to_floor_when_everything_fails` |
+| Non-monotone failures are handled; a passing value is never returned | `handles_non_monotone_failures`, `never_returns_a_passing_value` |
+| A complete result is a verified local minimum, checked by trying every move | `complete_result_is_a_verified_local_minimum`, `three_argument_result_is_a_coordinate_wise_local_minimum`, `complete_result_is_minimal_under_scaling_moves` |
+| Joint moves escape diagonals and proportional relations | `joint_move_escapes_a_diagonal`, `proportional_relations_shrink_to_smallest_ratio` |
+| The budget is respected; power-of-two steps cross parity (sign) | `respects_budget`, `power_of_two_steps_cross_parity` |
+
+**Limit:** a local minimum, not necessarily the global one.
+
+## 5. Recovering the input of an abort
+
+**Source:** [`check.fe`](../ingots/fuzzloom/src/check.fe), [`packages/cli/src/engine.ts`](../packages/cli/src/engine.ts) (`recoverAbort`, `searchFirst`)
+
+Fe cannot catch a panic or a revert. A property that overflows or divides by zero ends the test with a raw `Panic` payload and no input. Fuzzloom recovers the input anyway.
+
+**Prefix consistency.** The campaign stream is deterministic and the campaign stops at its first failure. So a campaign of `k` runs aborts exactly when `k` is past the first aborting iteration. It cannot instead return a counterexample: the first failing input and its shrink are the same for every such `k`, so that shrink would abort too. "Aborts at `k` runs" is therefore false, then true, as `k` grows.
+
+**k-ary search.** `searchFirst(lo, hi, width, probe)` finds the smallest `k` with a monotone predicate known true at `hi`. Each round probes up to `width` run counts in one batched `fe` run. The probes form the arithmetic progression `hi - s, hi - 2s, ...` with `s = floor((hi - lo) / (width + 1)) + 1`. Every gap between probes, and the gap below the lowest, then holds at most `floor((hi - lo) / (width + 1))` undecided values.
+
+**Guarantee:** the exact smallest aborting run count, in at most `ceil(log_(width+1)(runs))` rounds. One more round asks for `input_at(iteration)`, which evaluates nothing and cannot abort, and `replay_at(iteration)` together. An abort from the replay means the property itself aborts on that input. A plain `false` means the property fails normally and the in-Fe shrinker hit an aborting candidate. Both cases are reported as such.
+
+| Guarantee | Test |
+|---|---|
+| Failures are prefix-consistent in the campaign (and in mutation campaigns) | `prefix_consistent_failures`, `mutation_campaign_failures_are_prefix_consistent` |
+| `generated_at` recovers the failing input | `generated_at_recovers_the_failing_input` |
+| `searchFirst` returns the exact minimum within the round bound, swept over widths 1, 2, 7, 21 and 64, sizes up to 10,000 and dense answer positions | CLI: `searchFirst finds the exact minimum within the stated round bound` |
+| The probes are evenly spaced and every gap meets the bound | CLI: `probePoints is an evenly spaced progression whose gaps meet the roundsFor bound` |
+
+**Limit:** the property must be deterministic. Fixtures make effectful properties deterministic by building fresh state for every evaluation.
+
+## 6. Shrinking by replay
+
+**Source:** `shrinkByReplay`, `shrinkCandidates`, `jointCandidates` in [`engine.ts`](../packages/cli/src/engine.ts)
+
+An aborting input cannot be shrunk inside Fe, because the abort ends the test. The CLI shrinks it by replaying candidates, all of one round in a single `fe` run. Candidates act on each argument's distance from its floor: the lower end of a declared range, else 0.
+
+- **Single moves:** set one argument's distance to 0, or shift it right by 1, 2, 4, 8, and so on.
+- **Joint moves**, offered when at least two distances are nonzero:
+  - set every distance to 0;
+  - divide every distance by their gcd `g`, and by each of 2, 3, 5 and 7 that divides `g`, or halve them all when `g` is 1;
+  - subtract the same `d` from every distance, for `d` in `m`, 1, `m >> s` and `m - (m >> s)`, where `m` is the smallest distance.
+
+Each round accepts the reproducing candidate with the fewest total bits, then the smallest sum. "Reproducing" demands the same failure: the same panic code or revert message for an abort. Shrinking therefore cannot slide onto a different bug.
+
+**Guarantee, when complete:** no candidate move from the result reproduces, which makes it a local minimum under those moves. No candidate ever leaves the declared range. At most 8 rounds by default.
+
+| Guarantee | Test |
+|---|---|
+| The result is a local minimum, checked by enumerating every move | CLI: `reaches the stated local minimum and never accepts a non-reproducing candidate` |
+| Diagonal (`b == a + 1`) and proportional (`b == 2a`) failures that stall single moves are walked down | CLI: `joint moves walk a diagonal failure ...`, `joint moves follow a proportional failure ...` |
+| The documented limit: `(96, 192)` for `b == 2a, a >= 3` ends at `(4, 8)`, a local minimum, not the global `(3, 6)` | CLI: same test |
+| No candidate goes below a declared floor | CLI: `replay shrinking never leaves the declared range` |
+
+## 7. Differential digests and checkpoints
+
+**Source:** [`diff.fe`](../ingots/fuzzloom/src/diff.fe), `runDiffs` and `localiseDivergence` in [`engine.ts`](../packages/cli/src/engine.ts)
+
+**Digest.** `fold(acc, out) = ((acc ^ out) * 0x100000001B3 + 0xCBF29CE484222325) mod 2^256`, starting from the offset, over a target's outputs on the campaign stream. The fold is order-sensitive, so the digest after `k` inputs is the same whatever the total run count. That makes "digests differ after `k` inputs" monotone in `k`.
+
+**Checkpoints.** `checkpoints_within(t, bounds, seed, first, step, count)` folds once. It returns the digest after `first + j * step` inputs for every `j < count` (at most 256), as a `DynArray<u256>` payload. Fixed-size arrays are not allowed in Fe custom errors, so the payload uses `DynArray`, built with `MemVec`, which encodes identically on both backends.
+
+**Search.** The first round asks each target for checkpoints at the first search round's probes, plus the full run count. If every checkpoint matches, the target agrees. Any mismatch is a proven divergence, so a fold collision at the final digest cannot hide one. Later rounds use the same arithmetic-progression probes as section 5, so one checkpoint test answers a whole round. A final round regenerates the first diverging input and evaluates it on both backends.
+
+| Guarantee | Test |
+|---|---|
+| Each checkpoint equals the digest at its run count exactly | `every_checkpoint_equals_the_digest_at_its_run_count` |
+| Checkpoints agree before the first differing output and differ from it on | `checkpoints_locate_the_first_differing_output` |
+| The digest is the fold of exactly the generated inputs | `digest_is_the_fold_of_the_generated_inputs` |
+| A single differing output changes the digest; seed and run count matter | `digest_detects_a_single_differing_output`, `digest_depends_on_seed_and_runs` |
+| Both backends compute the same fold, generator and PRNG: one recorded constant checked on each | `known_answer_digest_matches_on_every_backend` |
+| The real `Checkpoints` payload decodes and matches separate digest tests on both backends | CLI: `integration: real checkpoints equal separate digests, on both backends` |
+
+**Limit:** the fold is a checksum, not a cryptographic hash. It detects a single differing output with overwhelming probability, but it is not designed against an adversary.
+
+## 8. Mutation around saved failures
+
+**Source:** [`mutate.fe`](../ingots/fuzzloom/src/mutate.fe)
+
+A mutation campaign explores the neighbourhood of one saved input instead of the whole input space. Each mutant starts from the saved input, clamped into bounds, and stacks 1 to 4 operators (`MAX_STACK`):
+- a small step up or down;
+- a single bit flip;
+- an edge value;
+- halving or doubling the distance from the floor;
+- a copy of another argument, plus or minus one;
+- a fresh uniform draw.
+
+Mutants never accumulate, so every one stays near the saved input. `fuzz` adds one mutation campaign per saved failure, up to 8 per property, to its first round.
+
+**Why:** after a fix, the exact saved input passes. A fix that special-cases only that input leaves its neighbours failing. A fresh campaign almost never lands there again; a mutation campaign does.
+
+| Guarantee | Test |
+|---|---|
+| Every mutant is within bounds, even from a corpus outside them; words past the arity stay zero | `mutants_stay_within_bounds`, `arguments_past_arity_stay_zero` |
+| `mutated_at(i)` reproduces the stream, and failures are prefix-consistent | `mutated_at_reproduces_the_stream`, `mutation_campaign_failures_are_prefix_consistent` |
+| It finds a 7-value incomplete-fix window around a `u256` corpus that a fresh 2,000-run campaign misses | `mutation_finds_an_incomplete_fix_that_fresh_campaigns_miss` |
+| The copy operator reaches correlated neighbours | `copy_operator_reaches_correlated_neighbours` |
+
+**Limit:** value-level operators only, with no dictionary of constants taken from the code under test. A seed uses the shrunk input, not the original.
+
+## 9. Choosing the search width
+
+**Source:** `chooseWidth`, `roundsFor` in [`engine.ts`](../packages/cli/src/engine.ts)
+
+Every `fe test` invocation compiles its ingot once, about 2.4 s idle (`COMPILE_MS`), and each additional test costs about 85 ms (`CASE_MS`). `roundsFor(u, k)` is the worst-case number of rounds for `u` undecided values at width `k`. `chooseWidth` picks the `k` that minimises `roundsFor(u, k) * (COMPILE_MS + CASE_MS * k)`, up to 64. For 10,000 runs that is width 21 and 3 rounds, where plain bisection takes 14 steps. Differential search does not need this trade-off: one checkpoint test answers a whole round at width 256.
+
+| Guarantee | Test |
+|---|---|
+| Bisection is the width-1 case (14 rounds for 10,000); width 21 needs 3 | CLI: `roundsFor and chooseWidth ...` |
+| The first differential round fits one checkpoint test and leaves at most 39 of 10,000 run counts | CLI: `the first diff round fits one checkpoint case ...` |
+
+**Limit:** the constants were measured on one machine. Under load the compile cost grows faster than the per-test cost, which shifts the best width by about 10%.
+
+## 10. Classifying outcomes
+
+**Source:** [`packages/cli/src/fe.ts`](../packages/cli/src/fe.ts), [`abi.ts`](../packages/cli/src/abi.ts)
+
+`fe test` prints `PASS|FAIL [time] name` per test, in completion order, followed by that test's revert payload or halt reason. The CLI splits the output per test name and decodes each payload by its selector. Selectors are computed with keccak-256 from the signatures, never hardcoded.
+
+| Outcome | Classified as |
+|---|---|
+| A Fuzzloom payload | a result |
+| `Panic(uint256)` or `Error(string)` | an abort from the user's code |
+| An `OutOfGas` halt | infrastructure: `out-of-gas` |
+| A compile error | infrastructure: `compile`, applied to every test in that ingot |
+| No result line for a test, `PASS` without a payload, an unknown selector, or a truncated payload | infrastructure: `unparsed` |
+| A timeout or a missing native backend | infrastructure: `timeout`, `backend-unavailable` |
+
+**Guarantee:** an infrastructure outcome is never reported as a failing property or a backend mismatch, and it stays attached to its own test.
+
+| Guarantee | Test |
+|---|---|
+| Per-name parsing in completion order; out-of-gas stays on its own test; a missing name or a payload-less `PASS` is `unparsed` | CLI: `batch` tests in `fe.test.ts` |
+| A compile error applies to every test | CLI: `batch output with a compile error applies it to every case` |
+| A known selector with a truncated body is infrastructure, not a crash | CLI: `a known selector with a truncated body is infra, not a crash` |

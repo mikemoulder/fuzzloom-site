@@ -59,6 +59,10 @@
   section.hero .hero__c p.hero__lead { color: var(--ink); }
   @media (max-width: 639px) { .hero__window .ui-term__up, .hero__window .ui-term__n { display: none; } .hero__window .ui-term { width: calc(100% - 12px); } }
   @media (max-width: 639px) { .hero__window .ui-term { margin-top: 16px; } }
+  /* the real seed-7 run has failures: a red cross where a passing line has its check */
+  .hero__window .ui-term { --t-bad: color-mix(in oklab, oklch(0.62 0.17 25) 84%, var(--u-ink)); }
+  .hero__window .ui-term__tick--bad { stroke: var(--t-bad); }
+  .hero__window .ui-term__ok--bad { background: var(--t-bad); }
   /* app-frame (sections-library.md) */
   .app.ui { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); margin-top: var(--s-7); background: var(--u-bg); border: 1px solid var(--u-border); border-radius: var(--u-r); box-shadow: var(--u-shadow); }
   .app > .app__pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
@@ -144,16 +148,16 @@
             </div>
             <div class="ui-term__screen" data-term-screen>
               <div class="ui-term__track" data-term-track>
-                <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/<span class="ui-term__up">examples/</span>token-ledger</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>npx fuzzloom fuzz</span></div>
+                <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/<span class="ui-term__up">examples/</span>token-ledger</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>npx fuzzloom fuzz --seed 7</span></div>
                 <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>4 of 4 properties</span></div>
-                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">prop_transfer_conserves_supply</span><span class="ui-term__n">10,000 inputs</span></div>
+                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick ui-term__tick--bad" viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg><span class="ui-term__path">prop_transfer_conserves_supply</span><span class="ui-term__n">aborts at input 3</span></div>
                 <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">prop_overdraft_changes_nothing</span><span class="ui-term__n">10,000 inputs</span></div>
-                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">prop_vested_never_exceeds_total</span><span class="ui-term__n">10,000 inputs</span></div>
+                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick ui-term__tick--bad" viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg><span class="ui-term__path">prop_vested_never_exceeds_total</span><span class="ui-term__n">aborts at input 1</span></div>
                 <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">prop_vesting_is_monotone_in_start</span><span class="ui-term__n">10,000 inputs</span></div>
                 <div class="ui-term__ln ui-term__gap" data-term-out aria-hidden="true"></div>
-                <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">Properties</span><span class="ui-term__val">4 passed</span><span class="ui-term__dim">(4)</span></div>
+                <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">Properties</span><span class="ui-term__val">2 passed, 2 failed</span><span class="ui-term__dim">(4)</span></div>
                 <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">Infrastructure</span><span class="ui-term__val">0 errors</span></div>
-                <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>Done</b><span class="ui-term__dim">in 6.1 s</span></div>
+                <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok ui-term__ok--bad"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 5.5 5 5M10.5 5.5l-5 5"/></svg></span><b>2 failures saved</b><span class="ui-term__dim">in 61.1 s, seed 7</span></div>
                 <div class="ui-term__ln ui-term__cmd" data-term-next><span class="ui-term__cwd">~/<span class="ui-term__up">examples/</span>token-ledger</span><span class="ui-term__sig">$</span><span class="ui-term__typed"></span><i class="ui-term__caret" aria-hidden="true"></i></div>
               </div>
             </div>

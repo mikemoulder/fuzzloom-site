@@ -90,6 +90,8 @@
   #backends .panel, #install .panel { --p-h: 520px; background: var(--g-alt); }
   @media (max-width: 639px) { #backends .panel, #install .panel { --p-h: 260px; } .backends__facts { display: none; } }
   #figures .frame { min-height: 340px; }
+  /* the close's wordmark: sized by the screen's height too, so a wide, short window never lays it over the links */
+  .close__word { font-size: clamp(56px, min(14.5vw, 20svh), 216px); line-height: 1; margin-bottom: var(--s-6); }
   #figures .frame > .stage { --card: var(--ground-bg); --frag: var(--ground-surface); }
   #figures .stats { grid-template-columns: minmax(0, 1fr); gap: var(--s-5); }
   #figures .stat .t-stat { margin: 0; }

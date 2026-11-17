@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en" data-type="software" data-radius="sharp" data-ground="sky" data-buttons="tonal" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fuzzloom: property-based testing and fuzzing for Fe</title>
+<meta name="description" content="Fuzzloom tries 10,000 inputs on every Fe property, shrinks each failure to a small counterexample and checks that the EVM and native backends agree.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Fuzzloom: property-based testing and fuzzing for Fe">
+<meta property="og:description" content="Generated inputs, shrunk counterexamples, saved failures and EVM/native differential testing for the Fe language.">
+<meta property="og:image" content="share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0f1f10">
+<!-- <link rel="canonical" href="https://[the site's domain]/"> -->
+<meta name="site-kind" content="software">
+<meta name="page-type" content="software">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..700&family=Figtree:wght@400..600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/system.css">
+<link rel="stylesheet" href="assets/ui/cards.css">
+<link rel="stylesheet" href="assets/motion/motion.css">
+<link rel="stylesheet" href="assets/backgrounds/backgrounds.css">
+<link rel="stylesheet" href="assets/layout/layout.css">
+<link rel="stylesheet" href="assets/icons/icon.css">
+<style>
+:root {
+  --p-bg: #0f1f10; --p-surface: #162a17; --p-ink: #ffffff; --p-muted: #9aa39a;
+  --p-accent: #c6f19d; --p-accent-ink: #0f1f10; --p-action: #c6f19d; --p-action-ink: #0f1f10;
+  --p-inv-bg: #ffffff; --p-inv-surface: #ecedec; --p-inv-ink: #0f1f10; --p-inv-muted: #606c60;
+  --p-inv-accent: #0f1f10; --p-inv-accent-ink: #ffffff; --p-inv-action: #0f1f10; --p-inv-action-ink: #ffffff;
+  --font-display: "Gabarito", system-ui, sans-serif;
+  --font-text: "Figtree", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --display-weight: 400;
+  --display-tracking: -0.03em;
+  --display-tracking-xl: -0.04em;
+  --ly-scale: 0.98;
+}
+</style>
+<link rel="stylesheet" href="assets/ui/base.css">
+<link rel="stylesheet" href="assets/ui/terminal-run/fragment.css">
+<link rel="stylesheet" href="assets/ui/window/fragment.css">
+<link rel="stylesheet" href="assets/ui/code/fragment.css">
+<link rel="stylesheet" href="assets/ui/checklist/fragment.css">
+<link rel="stylesheet" href="assets/diagrams/diagram.css">
+<script>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
+<script src="assets/backgrounds/backgrounds.js"></script>
+<script>document.documentElement.classList.add('mo-js');setTimeout(()=>document.documentElement.classList.add('mo-safe'),2500)</script>
+<link rel="modulepreload" href="assets/moments/moments.js">
+<link rel="modulepreload" href="assets/moments/lib.js">
+<link rel="modulepreload" href="assets/moments/pinned-chapters/moment.js">
+<link rel="modulepreload" href="assets/moments/counter-rolls/moment.js">
+<style>
+  /* hero: the one terminal inside the lit frame, centred on the page axis */
+  .hero__window .ui-term { width: min(680px, calc(100% - 32px)); margin: 32px auto 0; }
+  @media (min-width: 640px) { .hero__window .ui-term__path { flex: 0 1 36ch; } }
+  section.hero .hero__c p.hero__lead { color: var(--ink); }
+  @media (max-width: 639px) { .hero__window .ui-term__up, .hero__window .ui-term__n { display: none; } .hero__window .ui-term { width: calc(100% - 12px); } }
+  @media (max-width: 639px) { .hero__window .ui-term { margin-top: 16px; } }
+  /* app-frame (sections-library.md) */
+  .app.ui { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); margin-top: var(--s-7); background: var(--u-bg); border: 1px solid var(--u-border); border-radius: var(--u-r); box-shadow: var(--u-shadow); }
+  .app > .app__pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+  .app > .app__pane + .app__pane { border-left: 1px solid var(--u-line); }
+  .app > .app__pane > .ui-panel { width: 100%; border: 0; border-radius: 0; box-shadow: none; }
+  .app > .app__pane::after { content: ""; position: absolute; inset: auto 0 0 0; height: 64px; background: linear-gradient(transparent, var(--u-bg)); pointer-events: none; }
+  .app .ui-code { height: 100%; }
+  @media (min-width: 1024px) and (max-width: 1279px) { .app.ui { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); } }
+  @media (max-width: 1023px) {
+    .app.ui { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    .app > .app__pane--list { max-height: 252px; }
+    .app > .app__pane--list::after { display: none; }
+    .app .ui-win__side { display: none; }
+    .app .ui-win__body { grid-template-columns: minmax(0, 1fr); }
+    .app > .app__pane + .app__pane { border-left: 0; border-top: 1px solid var(--u-line); }
+  }
+  @media (max-width: 639px) {
+    .app.ui { grid-template-rows: minmax(0, 1fr); }
+    .app > .app__pane--list { display: none; }
+    .app > .app__pane + .app__pane { border-top: 0; }
+    .app .ui-code__pre, .app .ui-code__ln { white-space: pre-wrap; }
+    .app .ui-code__ln:is([data-n="44"], [data-n="45"], [data-n="46"], [data-n="47"], [data-n="48"], [data-n="50"], [data-n="51"], [data-n="52"], [data-n="55"], [data-n="56"]) { display: none; }
+  }
+  /* pinned chapters: each step's screen sits in its figure at its true size */
+  .mo-pc__visual .ui { margin: 40px auto 0; }
+  .mo-pc__visual .ui-code, .mo-pc__visual .ui-checks { width: min(440px, calc(100% - 48px)); }
+  #campaign:not(.is-live) .mo-pc__visual .ui { max-height: 14svh; overflow: hidden; margin-top: 12px; }
+  /* the diagram panels */
+  #backends .panel, #install .panel { --p-h: 520px; background: var(--g-alt); }
+  @media (max-width: 639px) { #backends .panel, #install .panel { --p-h: 260px; } .backends__facts { display: none; } }
+  #figures .frame { min-height: 340px; }
+  #figures .frame > .stage { --card: var(--ground-bg); --frag: var(--ground-surface); }
+  #figures .stats { grid-template-columns: minmax(0, 1fr); gap: var(--s-5); }
+  #figures .stat .t-stat { margin: 0; }
+  @media (max-width: 639px) { #figures .ui-term__n { display: none; } }
+</style>
+</head>
+<body>
+<!-- type: software (a developer tool)
+     deal: hero centred, palette forest-pale-lime, type gabarito, radius sharp, nav nav-split (dealt nav-cards: no
+     photographs to show, so dealt again without a panel), close close-word, footer footer-dark, rhythm dark-band,
+     buttons tonal, mark dots, ground sky; effect gradient-mesh in the hero frame
+     footer: dealt footer-statement, dealt again (footer-dark): its lit ground turns the primary dark, so the main action would show two looks
+     moments: pinned-chapters (#campaign), counter-rolls (#figures) -->
+<header class="nav nav--split">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#top">Skip to content</a>
+    <nav class="nav__links" aria-label="Main">
+      <div class="nav__item"><a class="nav__link" href="#failures">Failures</a></div>
+      <div class="nav__item"><a class="nav__link" href="#campaign">Campaigns</a></div>
+      <div class="nav__item"><a class="nav__link" href="#backends">Backends</a></div>
+      <div class="nav__item"><a class="nav__link" href="docs/">Docs</a></div>
+    </nav>
+    <a class="nav__logo" href="#top"><span class="mark" data-mark="dots" aria-hidden="true"></span>Fuzzloom</a>
+    <div class="nav__actions">
+      <a class="nav__link" href="https://github.com/MikeMoulder/fuzzloom">GitHub</a>
+      <a class="btn btn--primary" href="docs/quickstart.html">Read the quick start</a>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero hero--centred" data-enter aria-labelledby="hero-h">
+    <div class="wrap"><div class="hero-text">
+      <div class="hero__c">
+        <a class="pill" href="https://github.com/MikeMoulder/fuzzloom/blob/main/CHANGELOG.md"><span>Version 0.1.0 is on npm</span><span class="muted">Read the changelog</span></a>
+        <h1 id="hero-h">Property-based testing for Fe</h1>
+        <p class="hero__lead">Write a property as a Fe function. Fuzzloom tries 10,000 inputs on it inside Fe, shrinks every failure and checks that the EVM and native backends agree.</p>
+        <div class="btn-row"><a class="btn btn--primary" href="docs/quickstart.html">Read the quick start<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="https://github.com/MikeMoulder/fuzzloom">View the source</a></div>
+      </div>
+      <div class="hero__window" data-fx="gradient-mesh" data-fx-seed="11" role="img" aria-label="A terminal running npx fuzzloom fuzz on the token-ledger example: four properties, 10,000 inputs each, all passed in 6.1 seconds" data-ui-pause-host>
+        <div class="ly-piece" aria-hidden="true" data-ui-loop>
+          <div class="ui ui-panel ui-term" data-ui="terminal-run">
+            <div class="ui-term__head">
+              <span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="ui-term__title">examples/token-ledger</span>
+              <span class="ui-meta">bash</span>
+              <span class="ui-spacer"></span>
+              <span class="ui-chip ui-chip--plain ui-term__branch"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="3.5" r="1.5"/><circle cx="5" cy="12.5" r="1.5"/><circle cx="11" cy="5.5" r="1.5"/><path d="M5 5v6M11 7c0 2.6-6 1.8-6 4"/></svg>main</span>
+            </div>
+            <div class="ui-term__screen" data-term-screen>
+              <div class="ui-term__track" data-term-track>
+                <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/<span class="ui-term__up">examples/</span>token-ledger</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>npx fuzzloom fuzz</span></div>
+                <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>4 of 4 properties</span></div>
+                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">prop_transfer_conserves_supply</span><span class="ui-term__n">10,000 inputs</span></div>
+                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">prop_overdraft_changes_nothing</span><span class="ui-term__n">10,000 inputs</span></div>
+                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">prop_vested_never_exceeds_total</span><span class="ui-term__n">10,000 inputs</span></div>
+                <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">prop_vesting_is_monotone_in_start</span><span class="ui-term__n">10,000 inputs</span></div>
+                <div class="ui-term__ln ui-term__gap" data-term-out aria-hidden="true"></div>
+                <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">Properties</span><span class="ui-term__val">4 passed</span><span class="ui-term__dim">(4)</span></div>
+                <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">Infrastructure</span><span class="ui-term__val">0 errors</span></div>
+                <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>Done</b><span class="ui-term__dim">in 6.1 s</span></div>
+                <div class="ui-term__ln ui-term__cmd" data-term-next><span class="ui-term__cwd">~/<span class="ui-term__up">examples/</span>token-ledger</span><span class="ui-term__sig">$</span><span class="ui-term__typed"></span><i class="ui-term__caret" aria-hidden="true"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="section" id="failures" aria-labelledby="failures-h">
+    <div class="wrap">
+      <div class="grid">
+        <h2 id="failures-h" class="span-5">Every failing property, shrunk and saved</h2>
+        <div class="span-6 start-7 stack-4">
+          <p>A failing property becomes a record in .fuzzloom/failures, holding the smallest input that still fails. After the fix, replay runs every record again and marks it Fixed.</p>
+          <a class="link" href="docs/saved-failures.html">Read about saved failures</a>
+        </div>
+      </div>
+      <div class="ui app fill" role="img" aria-label="The saved failures of the two examples beside the vault-math withdrawal check, whose off-by-one line fails for balance 0 and amount 1" data-ui-pause-host>
+        <div class="app__pane app__pane--list" data-ui-loop>
+          <div class="ui ui-panel ui-win" data-ui="window" data-open="Open" data-work="Replaying" data-done="Fixed">
+            <div class="ui-win__bar">
+              <span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="ui-win__crumb">examples <i>/</i> <b>.fuzzloom/failures</b></span>
+              <span class="ui-spacer"></span>
+              <span class="ui-win__search" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><span class="ui-win__ph">Search</span><span class="ui-kbd">/</span></span>
+            </div>
+            <div class="ui-win__body">
+              <nav class="ui-win__side" aria-hidden="true">
+                <span class="ui-win__nav is-on"><svg class="ui-icon" viewBox="0 0 16 16"><path d="M2.5 9h3l1 1.5h3l1-1.5h3"/><path d="M2.5 9 4 3.5h8L13.5 9v3.5h-11z"/></svg>Open<em>7</em></span>
+                <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg>Fixed</span>
+                <span class="ui-win__label">Kinds</span>
+                <span class="ui-win__nav"><span class="ui-win__hash">#</span>Property<em>3</em></span>
+                <span class="ui-win__nav"><span class="ui-win__hash">#</span>Abort<em>3</em></span>
+                <span class="ui-win__nav"><span class="ui-win__hash">#</span>Diff<em>1</em></span>
+              </nav>
+              <div class="ui-win__main">
+                <div class="ui-win__cols" aria-hidden="true"><span>Target</span><span>Shrunk input</span><span>Status</span><span>Kind</span></div>
+                <ul class="ui-win__rows">
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">VM</span><span class="ui-win__who">prop_withdraw_never_overdraws</span><span class="ui-win__sub">balance 0, amount 1</span><span class="ui-win__st" data-st>Open</span><span class="ui-win__age">prop</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">VM</span><span class="ui-win__who">prop_fee_matches_exact_math</span><span class="ui-win__sub">amount 614891469123651721</span><span class="ui-win__st" data-st>Open</span><span class="ui-win__age">prop</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">VM</span><span class="ui-win__who">prop_redeem_rounds_toward_vault</span><span class="ui-win__sub">shares 1, assets 0, supply 1</span><span class="ui-win__st" data-st>Open</span><span class="ui-win__age">prop</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">VM</span><span class="ui-win__who">prop_share_price_defined</span><span class="ui-win__sub">assets 0, supply 0 · Panic 0x12</span><span class="ui-win__st" data-st>Open</span><span class="ui-win__age">abort</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">TL</span><span class="ui-win__who">prop_transfer_conserves_supply</span><span class="ui-win__sub">amount 0, to_bob false · Panic 0x11</span><span class="ui-win__st" data-st>Open</span><span class="ui-win__age">abort</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">TL</span><span class="ui-win__who">prop_vested_never_exceeds_total</span><span class="ui-win__sub">start 1668464001 · Panic 0x11</span><span class="ui-win__st" data-st>Open</span><span class="ui-win__age">abort</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">VM</span><span class="ui-win__who">diff_rounding_mode</span><span class="ui-win__sub">x 15398200176277126999</span><span class="ui-win__st" data-st>Open</span><span class="ui-win__age">diff</span></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="app__pane app__pane--open">
+          <div class="ui ui-panel ui-code" data-ui="code">
+            <div class="ui-code__tabs">
+              <span class="ui-code__tab is-on"><i class="ui-code__lang">FE</i>vault-math/src/lib.fe</span>
+              <span class="ui-spacer"></span>
+              <span class="ui-chip ui-chip--plain ui-code__chip" data-code-chip>1 counterexample</span>
+            </div>
+            <pre class="ui-code__pre"><code><span class="ui-code__ln" data-n="44"><span class="c">/// Whether a withdrawal of `amount` from `balance` is allowed.</span></span>
+<span class="ui-code__ln" data-n="45"><span class="c">///</span></span>
+<span class="ui-code__ln" data-n="46"><span class="c">/// PLANTED BUG (off by one between two arguments): `&lt;=` against</span></span>
+<span class="ui-code__ln" data-n="47"><span class="c">/// `balance + 1` admits a withdrawal one unit larger than the balance.</span></span>
+<span class="ui-code__ln" data-n="48"><span class="c">/// Fix: `amount &lt;= balance`.</span></span>
+<span class="ui-code__ln" data-n="49"><span class="k">pub fn</span> <span class="f">can_withdraw</span>(_ balance: u128, _ amount: u128) -&gt; bool {</span>
+<span class="ui-code__ln" data-n="50" data-note="The u128::MAX guard holds for every input.">    <span class="k">if</span> balance == u128::<span class="f">max</span>() {</span>
+<span class="ui-code__ln" data-n="51">        <span class="k">return</span> true</span>
+<span class="ui-code__ln" data-n="52">    }</span>
+<span class="ui-code__ln is-mark" data-n="53">    amount &lt;= balance + <span class="n">1</span></span>
+<span class="ui-code__ln" data-n="54">}</span>
+<span class="ui-code__ln" data-n="55"> </span>
+<span class="ui-code__ln" data-n="56"><span class="c">/// An allowed withdrawal never exceeds the balance.</span></span>
+<span class="ui-code__ln" data-n="57" data-note="The property: a withdrawal never exceeds the balance."><span class="k">pub fn</span> <span class="f">prop_withdraw_never_overdraws</span>(_ balance: u128, _ amount: u128) -&gt; bool {</span>
+<span class="ui-code__ln" data-n="58">    !<span class="f">can_withdraw</span>(balance, amount) || amount &lt;= balance</span></code></pre>
+            <div class="ui-code__hint" data-code-hint><span class="ui-dot"></span><span data-code-text>Fails for balance 0, amount 1: shrunk from two 128-bit values.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="campaign" style="--h: 2" data-moment="pinned-chapters" aria-labelledby="campaign-h">
+    <div class="wrap mo-pc__grid">
+      <div class="mo-pc__text">
+        <h2 id="campaign-h">Fuzzloom campaigns in 3 steps</h2>
+        <ol class="mo-pc__steps">
+          <li class="mo-pc__step">
+            <h3>The property, written in Fe</h3>
+            <p>Any pub fn named prop_ that returns bool. Effects come from your fixture functions; a doc comment can restrict a range.</p>
+            <figure class="mo-pc__visual" role="img" aria-label="The vesting property of the token-ledger example, with its declared start range">
+              <div class="ui ui-panel ui-code" data-ui="code" aria-hidden="true">
+                <div class="ui-code__tabs"><span class="ui-code__tab is-on"><i class="ui-code__lang">FE</i>token-ledger/src/lib.fe</span><span class="ui-spacer"></span><span class="ui-chip ui-chip--plain ui-code__chip" data-code-chip>1 range</span></div>
+                <pre class="ui-code__pre"><code><span class="ui-code__ln is-mark" data-n="105"><span class="c">/// fuzzloom: start in 1668464000..=1700000000</span></span>
+<span class="ui-code__ln" data-n="106" data-note="Up to three integer or bool arguments."><span class="k">pub fn</span> <span class="f">prop_vested_never_exceeds_total</span>(_ total: u128, start: u64) -&gt; bool</span>
+<span class="ui-code__ln" data-n="107" data-note="The clock comes from fixture_clock(), fresh each time."><span class="k">uses</span> (clock: Clock)</span>
+<span class="ui-code__ln" data-n="108">{</span>
+<span class="ui-code__ln" data-n="109">    <span class="f">vested</span>(total, start) &lt;= total</span>
+<span class="ui-code__ln" data-n="110">}</span></code></pre>
+                <div class="ui-code__hint" data-code-hint><span class="ui-dot"></span><span data-code-text>The range keeps start inside the year before the clock.</span></div>
+              </div>
+            </figure>
+          </li>
+          <li class="mo-pc__step">
+            <h3>The aborting input, found by fuzzing</h3>
+            <p>10,000 inputs, one in four from the edges of its type. Fe cannot catch a panic, so the input is recovered by search and shrunk by replay.</p>
+            <figure class="mo-pc__visual" role="img" aria-label="The vesting overflow: total times elapsed overflows u128, found at the first input">
+              <div class="ui ui-panel ui-code" data-ui="code" aria-hidden="true">
+                <div class="ui-code__tabs"><span class="ui-code__tab is-on"><i class="ui-code__lang">FE</i>token-ledger/src/lib.fe</span><span class="ui-spacer"></span><span class="ui-chip ui-chip--plain ui-code__chip" data-code-chip>Panic 0x11</span></div>
+                <pre class="ui-code__pre"><code><span class="ui-code__ln" data-n="90">    <span class="k">let</span> elapsed = now - start</span>
+<span class="ui-code__ln" data-n="91" data-note="Before the cliff nothing vests.">    <span class="k">if</span> elapsed &lt; CLIFF {</span>
+<span class="ui-code__ln" data-n="92">        <span class="k">return</span> <span class="n">0</span></span>
+<span class="ui-code__ln" data-n="93">    }</span>
+<span class="ui-code__ln" data-n="94" data-note="After the full duration everything vests.">    <span class="k">if</span> elapsed &gt;= DURATION {</span>
+<span class="ui-code__ln" data-n="95">        <span class="k">return</span> total</span>
+<span class="ui-code__ln" data-n="96">    }</span>
+<span class="ui-code__ln is-mark" data-n="97">    total * (elapsed <span class="k">as</span> u128) / (DURATION <span class="k">as</span> u128)</span></code></pre>
+                <div class="ui-code__hint" data-code-hint><span class="ui-dot"></span><span data-code-text>Overflows for total 15829941688929438697355903228009.</span></div>
+              </div>
+            </figure>
+          </li>
+          <li class="mo-pc__step">
+            <h3>The fixed property, checked by replay</h3>
+            <p>Each failure stays in .fuzzloom/failures. After the fix, fuzzloom replay runs them all again, and later campaigns mutate them.</p>
+            <figure class="mo-pc__visual" role="img" aria-label="fuzzloom replay marking the four saved vault-math property failures as fixed">
+              <div class="ui ui-panel ui-checks" data-ui="checklist" aria-hidden="true">
+                <div class="ui-checks__head"><div class="ui-title">fuzzloom replay</div><span class="ui-spacer"></span><div class="ui-meta" data-checks-count>1 of 4 fixed</div></div>
+                <div class="ui-checks__bar"><i data-checks-bar style="--k:0.25"></i></div>
+                <ul class="ui-checks__list">
+                  <li class="ui-check is-done"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">prop_withdraw_never_overdraws</span></li>
+                  <li class="ui-check"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">prop_fee_matches_exact_math</span></li>
+                  <li class="ui-check"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">prop_redeem_rounds_toward_vault</span></li>
+                  <li class="ui-check"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">prop_share_price_defined</span></li>
+                </ul>
+              </div>
+            </figure>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="section ground-inverse" id="backends" aria-labelledby="backends-h">
+    <div class="wrap">
+      <div class="grid">
+        <div class="span-5 stack-6">
+          <h2 id="backends-h">Differential testing of sonatina and native</h2>
+          <p class="t-lead">Every diff_ function runs 100,000 inputs on both backends. One test per backend returns 256 checkpoint digests, so the first differing input is pinned in 8 fe runs.</p>
+          <div class="stack-2 backends__facts">
+            <p>vault-math, seed 7: input 269</p>
+            <p>sonatina returns 1539820017627712699</p>
+            <p>native returns 1539820017627712700</p>
+          </div>
+          <a class="link" href="docs/differential.html">Read how diff works</a>
+        </div>
+        <div class="frame frame--split span-6 start-7">
+          <div class="panel"><div class="dg" data-diagram><script type="application/json">{"layout": "lanes", "alt": "Every diff_ function's inputs run through fuzzloom diff on the sonatina and native backends; their checkpoint digests meet at the first differing input.", "curve": "curve", "ground": "none", "input": {"label": "Inputs", "icon": "ui:file-code", "meta": "100,000"}, "core": {"label": "diff", "icon": "ui:git-compare"}, "lanes": [{"label": "sonatina", "icon": "ui:cpu", "meta": "EVM", "done": true}, {"label": "native", "icon": "ui:cpu", "meta": "native", "done": true}, {"label": "Input 269", "icon": "ui:crosshair", "meta": "differs", "done": true}]}</script></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="figures" style="--hm: 2" aria-labelledby="figures-h">
+    <div class="wrap">
+      <div class="grid">
+        <div class="span-5 stack-6">
+          <h2 id="figures-h">Results on the examples</h2>
+          <p class="t-lead">Both examples ship with their planted bugs. CI reruns them on every push and checks that seed 7 still finds the same results.</p>
+          <div class="stats" data-moment="counter-rolls">
+            <div class="stat"><p class="t-stat">6</p><p class="t-small muted">planted bugs found and shrunk</p></div>
+            <div class="stat"><p class="t-stat">8</p><p class="t-small muted">fe runs to pin a backend divergence</p></div>
+            <div class="stat"><p class="t-stat">92</p><p class="t-small muted">Fe tests on both backends</p></div>
+            <div class="stat"><p class="t-stat">56 kB</p><p class="t-small muted">npm package, no dependencies</p></div>
+          </div>
+          <a class="link" href="https://github.com/MikeMoulder/fuzzloom/tree/main/examples">See the examples</a>
+        </div>
+        <div class="frame frame--lit span-6 start-7" role="img" aria-label="The end of a CI run of scripts/ci.sh: Fe tests on both backends, CLI tests, the package installed outside the repository, and the four seed-7 example checks, all passed" data-ui-pause-host>
+          <div class="stage"><div class="at-rise fit" style="--fit-max:560px;--ax:max(24px, 50% - 280px);--ay:40px;--ay-sm:24px" aria-hidden="true" data-ui-loop>
+            <div class="ui ui-panel ui-term" data-ui="terminal-run">
+              <div class="ui-term__head">
+                <span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="ui-term__title">fuzzloom</span>
+                <span class="ui-meta">CircleCI</span>
+                <span class="ui-spacer"></span>
+                <span class="ui-chip ui-chip--plain ui-term__branch"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="3.5" r="1.5"/><circle cx="5" cy="12.5" r="1.5"/><circle cx="11" cy="5.5" r="1.5"/><path d="M5 5v6M11 7c0 2.6-6 1.8-6 4"/></svg>main</span>
+              </div>
+              <div class="ui-term__screen" data-term-screen>
+                <div class="ui-term__track" data-term-track>
+                  <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/fuzzloom</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>bash scripts/ci.sh</span></div>
+                  <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>6 of 6 steps</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">Format check</span><span class="ui-term__n">clean</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">Fe tests, both backends</span><span class="ui-term__n">92 x 2</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">CLI tests</span><span class="ui-term__n">67 passed</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">Package install test</span><span class="ui-term__n">doctor ok</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">vault-math, fuzz and diff</span><span class="ui-term__n">seed 7</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">token-ledger, fuzz and diff</span><span class="ui-term__n">seed 7</span></div>
+                  <div class="ui-term__ln ui-term__gap" data-term-out aria-hidden="true"></div>
+                  <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>CI passed</b></div>
+                  <div class="ui-term__ln ui-term__cmd" data-term-next><span class="ui-term__cwd">~/fuzzloom</span><span class="ui-term__sig">$</span><span class="ui-term__typed"></span><i class="ui-term__caret" aria-hidden="true"></i></div>
+                </div>
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="faq" aria-labelledby="faq-h">
+    <div class="wrap">
+      <div class="grid">
+        <div class="span-5 stack-6">
+          <h2 id="faq-h">Questions</h2>
+          <p>The guide answers the rest, with every output explained.</p>
+          <a class="link" href="docs/guide.html">Read the guide</a>
+        </div>
+        <div class="faq span-6 start-7">
+          <div class="faq__item"><h3>Does a passing campaign prove the property?</h3><p>No. It means 10,000 inputs found nothing, and the report says which edges they reached.</p></div>
+          <div class="faq__item"><h3>Does it need fe 26.6?</h3><p>Yes. npx fuzzloom doctor checks the version and that the library compiles with it.</p></div>
+          <div class="faq__item"><h3>Does the fuzzing run on Windows?</h3><p>Yes. Native tests run inside WSL.</p></div>
+          <div class="faq__item"><h3>Can a property use effects?</h3><p>Yes, through one fixture_ function per effect, built fresh for every input.</p></div>
+          <div class="faq__item"><h3>Where do saved failures go?</h3><p>To .fuzzloom/failures, one JSON record each. Commit them: replay re-checks them all.</p></div>
+          <div class="faq__item"><h3>What is the price?</h3><p>Nothing. It is open source under the Apache License 2.0.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="install" aria-labelledby="install-h">
+    <div class="wrap">
+      <div class="grid">
+        <div class="span-5 stack-6">
+          <h2 id="install-h">Runs on Node 22 and fe 26.6</h2>
+          <p class="t-lead">npx fuzzloom needs Node 22.18 and fe 26.6. JUnit reports drop into any CI; native tests run on Linux, macOS, or through WSL on Windows.</p>
+          <p><code>npx fuzzloom doctor</code> checks every piece and prints the fix for anything missing.</p>
+          <a class="link" href="docs/ci.html">Read the CI guide</a>
+        </div>
+        <div class="frame frame--split span-6 start-7">
+          <div class="panel"><div class="dg" data-diagram data-dg-still><script type="application/json">{"layout": "hub", "alt": "Fuzzloom installs from npm, runs on Node.js and Linux, macOS or Windows through WSL, and reports to GitHub Actions or CircleCI.", "ground": "none", "motion": {"pulse": "none"}, "center": {"label": "fuzzloom"}, "spokes": [{"label": "npm", "icon": "npm"}, {"label": "Node.js", "icon": "nodejs"}, {"label": "Linux", "icon": "linux-tux"}, {"label": "macOS", "icon": "apple"}, {"label": "WSL", "icon": "windows"}, {"label": "GitHub Actions", "icon": "github-actions"}, {"label": "CircleCI", "icon": "circleci"}]}</script></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer closing footer--dark ground-inverse" id="contact" aria-labelledby="close-h">
+  <div class="wrap">
+    <div class="closing__cta close--word">
+      <div class="section-head--split">
+        <div><h2 id="close-h">Fuzzloom finds the inputs your tests missed</h2><p class="t-lead">Run npx fuzzloom fuzz in any Fe ingot. Free under Apache-2.0.</p></div>
+        <a class="btn btn--primary" href="docs/quickstart.html">Read the quick start<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+      </div>
+      <p class="close__word" aria-hidden="true">Fuzzloom</p>
+    </div>
+    <div class="closing__links">
+      <div class="grid">
+        <div class="span-4 stack-4">
+          <a class="nav__logo" href="#top"><span class="mark" data-mark="dots" aria-hidden="true"></span>Fuzzloom</a>
+          <p class="footer__lede">Property-based testing and fuzzing for Fe.</p>
+        </div>
+        <div class="span-2 footer__col"><h3>Product</h3><ul><li><a href="#failures">Failures</a></li><li><a href="#campaign">Campaigns</a></li><li><a href="#backends">Backends</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>Docs</h3><ul><li><a href="docs/quickstart.html">Quick start</a></li><li><a href="docs/guide.html">Guide</a></li><li><a href="docs/cli.html">CLI reference</a></li><li><a href="docs/algorithms.html">Algorithms</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>Project</h3><ul><li><a href="https://github.com/MikeMoulder/fuzzloom">GitHub</a></li><li><a href="https://www.npmjs.com/package/fuzzloom">npm</a></li><li><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/CHANGELOG.md">Changelog</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>For agents</h3><ul><li><a href="llms.txt">llms.txt</a></li><li><a href="llms-full.txt">llms-full.txt</a></li></ul></div>
+      </div>
+      <div class="footer__legal">
+        <span>&copy; 2026 Fuzzloom &nbsp; Apache License 2.0</span>
+        <div class="socials"></div>
+        <span>Product names and logos are trademarks of their owners</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<nav class="actionbar" aria-label="Quick actions">
+  <a class="btn btn--primary" href="docs/quickstart.html">Read the quick start</a>
+</nav>
+
+<script type="module" src="assets/system.js"></script>
+<script type="module" src="assets/motion/motion.js"></script>
+<script type="module" src="assets/layout/layout.js"></script>
+<script type="module" src="assets/diagrams/mount.js"></script>
+</body>
+</html>

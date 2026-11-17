@@ -1,0 +1,4 @@
+[
+  { "check": "scroll-reveal", "target": "fuzzloom npm Node.js", "reason": "The kit's own diagram script syncs its held still picture as it enters view (diagram.js, IntersectionObserver); the hub is data-dg-still with pulse none, nothing is hidden before or revealed after, only the lit colour settles." },
+  { "check": "cut-text", "target": "dg-cap__l", "reason": "The kit's diagram sets each caption under its icon tile; the caption is wider than its tile by design and fully visible: its own scrollWidth equals its width at 390." }
+]

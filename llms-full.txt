@@ -1,6 +1,6 @@
 # Fuzzloom documentation (full text)
 
-<!-- docs/index.html -->
+<!-- https://fuzzloom.pages.dev/docs/index.html -->
 
 # Introduction
 
@@ -50,7 +50,7 @@ FAIL  prop_withdraw_never_overdraws(u128, u128)  counterexample at input 19
 
 ---
 
-<!-- docs/quickstart.html -->
+<!-- https://fuzzloom.pages.dev/docs/quickstart.html -->
 
 # Quick start
 
@@ -148,7 +148,7 @@ Commit `.fuzzloom/failures/`: it is your regression suite. Every later `fuzz` al
 
 ---
 
-<!-- docs/installation.html -->
+<!-- https://fuzzloom.pages.dev/docs/installation.html -->
 
 # Installation
 
@@ -169,7 +169,7 @@ npx fuzzloom doctor
 
 ---
 
-<!-- docs/writing-properties.html -->
+<!-- https://fuzzloom.pages.dev/docs/writing-properties.html -->
 
 # Writing properties
 
@@ -211,7 +211,7 @@ FAIL  prop_fee_matches_exact_math(u64)  counterexample at input 2
 
 ---
 
-<!-- docs/results.html -->
+<!-- https://fuzzloom.pages.dev/docs/results.html -->
 
 # Reading the results
 
@@ -251,7 +251,7 @@ npx fuzzloom reproduce prop_fee_matches_exact_math-0e05b819
 
 ---
 
-<!-- docs/effects.html -->
+<!-- https://fuzzloom.pages.dev/docs/effects.html -->
 
 # Effects and fixtures
 
@@ -305,7 +305,7 @@ pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
 
 ---
 
-<!-- docs/ranges.html -->
+<!-- https://fuzzloom.pages.dev/docs/ranges.html -->
 
 # Input ranges
 
@@ -334,7 +334,7 @@ In `examples/token-ledger`, this annotation turns a vesting overflow that 10,000
 
 ---
 
-<!-- docs/differential.html -->
+<!-- https://fuzzloom.pages.dev/docs/differential.html -->
 
 # Differential testing
 
@@ -368,7 +368,7 @@ Targets may use effects and declared ranges exactly as properties do. `diff` nee
 
 ---
 
-<!-- docs/saved-failures.html -->
+<!-- https://fuzzloom.pages.dev/docs/saved-failures.html -->
 
 # Saved failures
 
@@ -396,7 +396,7 @@ FAIL  prop_x(u256)  counterexample at mutant 37 of saved failure prop_x-1a2b3c4d
 
 ---
 
-<!-- docs/ci.html -->
+<!-- https://fuzzloom.pages.dev/docs/ci.html -->
 
 # Running in CI
 
@@ -422,7 +422,7 @@ Fuzzloom's own pipeline, [`scripts/ci.sh`](../scripts/ci.sh), is a complete work
 
 ---
 
-<!-- docs/good-properties.html -->
+<!-- https://fuzzloom.pages.dev/docs/good-properties.html -->
 
 # Writing good properties
 
@@ -437,7 +437,7 @@ Fuzzloom's own pipeline, [`scripts/ci.sh`](../scripts/ci.sh), is a complete work
 
 ---
 
-<!-- docs/guide.html -->
+<!-- https://fuzzloom.pages.dev/docs/guide.html -->
 
 # Fuzzloom guide
 
@@ -726,7 +726,7 @@ Everything is a command-line option or an environment variable. There is no conf
 
 ---
 
-<!-- docs/configuration.html -->
+<!-- https://fuzzloom.pages.dev/docs/configuration.html -->
 
 # Configuration
 
@@ -744,7 +744,7 @@ Everything is a command-line option or an environment variable. There is no conf
 
 ---
 
-<!-- docs/troubleshooting.html -->
+<!-- https://fuzzloom.pages.dev/docs/troubleshooting.html -->
 
 # Troubleshooting
 
@@ -761,7 +761,7 @@ Everything is a command-line option or an environment variable. There is no conf
 
 ---
 
-<!-- docs/cli.html -->
+<!-- https://fuzzloom.pages.dev/docs/cli.html -->
 
 # CLI reference
 
@@ -835,7 +835,7 @@ fuzzloom <command> [path] [options]
 
 ---
 
-<!-- docs/architecture.html -->
+<!-- https://fuzzloom.pages.dev/docs/architecture.html -->
 
 # Architecture
 
@@ -1014,7 +1014,7 @@ The npm package `fuzzloom` contains compiled JavaScript (`dist/`), because Node 
 
 ---
 
-<!-- docs/algorithms.html -->
+<!-- https://fuzzloom.pages.dev/docs/algorithms.html -->
 
 # Algorithms and their guarantees
 

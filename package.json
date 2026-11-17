@@ -4,7 +4,9 @@
   "type": "module",
   "description": "The Fuzzloom website: landing page and docs, built from the Fuzzloom repository's markdown",
   "scripts": {
-    "build": "node build/docs.mjs"
+    "build": "node build/docs.mjs",
+    "dist": "node build/dist.mjs",
+    "deploy": "BASE=https://fuzzloom.pages.dev node build/docs.mjs && node build/dist.mjs && npx wrangler pages deploy dist --project-name fuzzloom --branch main"
   },
   "devDependencies": {
     "marked": "^15.0.0"

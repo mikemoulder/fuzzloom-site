@@ -85,7 +85,7 @@
 </tr>
 <tr>
 <td><code>fuzzloom diff [path]</code></td>
-<td>Digests every differential target on sonatina and native and pins the first diverging input</td>
+<td>Compares keyed checkpoints on sonatina and native and verifies the located mismatch</td>
 </tr>
 <tr>
 <td><code>fuzzloom reproduce &lt;id&gt; [path]</code></td>
@@ -107,7 +107,11 @@
 </thead>
 <tbody><tr>
 <td><code>--seed &lt;n&gt;</code></td>
-<td>Base seed. Default: random, printed so the run can be repeated exactly</td>
+<td>Base seed. The CLI prints the seed so the input stream can be repeated</td>
+</tr>
+<tr>
+<td><code>--digest-key &lt;n&gt;</code></td>
+<td>Reuse the recorded checkpoint key for <code>diff</code>. The default is sampled independently of the campaign seed</td>
 </tr>
 <tr>
 <td><code>--runs &lt;n&gt;</code></td>

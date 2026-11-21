@@ -292,9 +292,10 @@
 </div>
 <h2 id="7-differential-digests-and-checkpoints"><a class="anchor" href="#7-differential-digests-and-checkpoints" aria-hidden="true" tabindex="-1">#</a>7. Differential digests and checkpoints</h2>
 <p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/diff.fe" rel="noopener"><code>diff.fe</code></a>, <code>runDiffs</code> and <code>localiseDivergence</code> in <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/packages/cli/src/engine.ts" rel="noopener"><code>engine.ts</code></a></p>
-<p><strong>Digest.</strong> <code>fold(acc, out) = ((acc ^ out) * 0x100000001B3 + 0xCBF29CE484222325) mod 2^256</code>, starting from the offset, over a target&#39;s outputs on the campaign stream. The fold is order-sensitive, so the digest after <code>k</code> inputs is the same whatever the total run count. That makes &quot;digests differ after <code>k</code> inputs&quot; monotone in <code>k</code>.</p>
-<p><strong>Checkpoints.</strong> <code>checkpoints_within(t, bounds, seed, first, step, count)</code> folds once. It returns the digest after <code>first + j * step</code> inputs for every <code>j &lt; count</code> (at most 256), as a <code>DynArray&lt;u256&gt;</code> payload. Fixed-size arrays are not allowed in Fe custom errors, so the payload uses <code>DynArray</code>, built with <code>MemVec</code>, which encodes identically on both backends.</p>
-<p><strong>Search.</strong> The first round asks each target for checkpoints at the first search round&#39;s probes, plus the full run count. If every checkpoint matches, the target agrees. Any mismatch is a proven divergence, so a fold collision at the final digest cannot hide one. Later rounds use the same arithmetic-progression probes as section 5, so one checkpoint test answers a whole round. A final round regenerates the first diverging input and evaluates it on both backends.</p>
+<p><strong>Digest.</strong> The CLI splits each 256-bit output into three base-<code>2^126</code> digits and feeds them most significant first into <code>acc = (acc * key + digit) mod p</code>, starting at zero, with <code>p = 2^127 - 1</code>. Every digit is strictly less than <code>p</code>, so distinct output sequences of equal length give distinct coefficient sequences. The Fe reducer adds the low 127 bits to the high bits, using <code>2^127 ≡ 1 (mod p)</code>. A single conditional subtraction suffices because the unreduced sum is below <code>2p</code>. The unkeyed Fe API still produces its original FNV-style checksum.</p>
+<p><strong>Checkpoints.</strong> <code>keyed_checkpoints_within</code> folds once and returns the digest after <code>first + j * step</code> inputs for every <code>j &lt; count</code> (at most 256) in a <code>DynArray&lt;u256&gt;</code> payload. Each prefix depends only on its inputs and key, so overlapping prefixes agree across rounds on the same backend.</p>
+<p><strong>Collision bound.</strong> With deterministic streams fixed independently of an initially uniform nonzero key, two different length-<code>k</code> prefixes collide with probability at most <code>(3k - 1)/(p - 1)</code> over the sampled key. Before the first differing output, prefix digests always agree. For one target, sum the bound over the probes on the collision-free search path. The path is fixed independently of the key, and the actual adaptive search can first depart from it only at one of those probes. Sum across targets for a campaign-wide bound. The probability applies to a fresh draw and gives no unconditional guarantee for a fixed key.</p>
+<p><strong>Search.</strong> The first round probes evenly spaced checkpoints through the full run count. Subsequent rounds narrow the interval using the arithmetic progressions in section 5. A final round reports a finding only when both backends evaluated the same input and returned different outputs. If the candidate fails validation, the CLI reports <code>unlocated</code> as an infrastructure result. A collision can hide a mismatch or lead the search to a later real mismatch. The CLI records the independent key in text, JSON and JUnit. <code>--digest-key</code> reuses it for an exact rerun of the comparisons.</p>
 <div class="table"><table>
 <thead>
 <tr>
@@ -307,8 +308,16 @@
 <td><code>every_checkpoint_equals_the_digest_at_its_run_count</code></td>
 </tr>
 <tr>
-<td>Checkpoints agree before the first differing output and differ from it on</td>
-<td><code>checkpoints_locate_the_first_differing_output</code></td>
+<td>The old checksum can reconverge after two differing output words</td>
+<td><code>legacy_checksum_reconverges_on_two_words</code></td>
+</tr>
+<tr>
+<td>Field arithmetic matches an integer-modulo reference at limb boundaries</td>
+<td><code>keyed_fold_matches_integer_modulo_reference</code></td>
+</tr>
+<tr>
+<td>A fixed key can collide at the first output</td>
+<td><code>keyed_fold_can_collide_even_on_the_first_word</code></td>
 </tr>
 <tr>
 <td>The digest is the fold of exactly the generated inputs</td>
@@ -326,9 +335,12 @@
 <td>The real <code>Checkpoints</code> payload decodes and matches separate digest tests on both backends</td>
 <td>CLI: <code>integration: real checkpoints equal separate digests, on both backends</code></td>
 </tr>
+<tr>
+<td>Generated keyed checkpoints match an independent BigInt reference on both backends</td>
+<td>CLI: <code>integration: keyed checkpoints match a BigInt reference on both backends</code></td>
+</tr>
 </tbody></table>
 </div>
-<p><strong>Limit:</strong> the fold is a checksum, not a cryptographic hash. It detects a single differing output with overwhelming probability, but it is not designed against an adversary.</p>
 <h2 id="8-mutation-around-saved-failures"><a class="anchor" href="#8-mutation-around-saved-failures" aria-hidden="true" tabindex="-1">#</a>8. Mutation around saved failures</h2>
 <p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/mutate.fe" rel="noopener"><code>mutate.fe</code></a></p>
 <p>A mutation campaign explores the neighbourhood of one saved input instead of the whole input space. Each mutant starts from the saved input, clamped into bounds, and stacks 1 to 4 operators (<code>MAX_STACK</code>):</p>

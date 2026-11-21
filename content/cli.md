@@ -13,7 +13,7 @@ fuzzloom <command> [path] [options]
 | `fuzzloom doctor [path]` | Checks Node, fe and its version, that the bundled Fe library compiles with your fe, the native backend, and the project's targets. Exits 2 if a required piece is missing |
 | `fuzzloom list [path]` | Lists every target with its signature, effects, fixtures and declared ranges, and every skipped function with the reason |
 | `fuzzloom fuzz [path]` | Runs every property campaign, plus one mutation campaign per saved failure, then recovers and shrinks any abort |
-| `fuzzloom diff [path]` | Digests every differential target on sonatina and native and pins the first diverging input |
+| `fuzzloom diff [path]` | Compares keyed checkpoints on sonatina and native and verifies the located mismatch |
 | `fuzzloom reproduce <id> [path]` | Replays one saved failure from its stored input, with no random generation |
 | `fuzzloom replay [path]` | Replays every saved failure: `FIXED` when it now passes, `FAILS` when it still fails, `REGRESSED` when a fixed one is back |
 
@@ -21,7 +21,8 @@ fuzzloom <command> [path] [options]
 
 | Option | Meaning |
 |---|---|
-| `--seed <n>` | Base seed. Default: random, printed so the run can be repeated exactly |
+| `--seed <n>` | Base seed. The CLI prints the seed so the input stream can be repeated |
+| `--digest-key <n>` | Reuse the recorded checkpoint key for `diff`. The default is sampled independently of the campaign seed |
 | `--runs <n>` | Inputs per property (default 10,000) or per differential target (default 100,000) |
 | `--backend <b>` | `sonatina` (EVM, the default) or `native` |
 | `--only <text>` | Only targets, or for `replay` saved failures, whose name contains the text |

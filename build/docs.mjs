@@ -8,7 +8,7 @@
 //
 //   node build/docs.mjs            (BASE=https://example.pages.dev for absolute llms.txt links)
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { copyFileSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { marked } from "marked";
 
@@ -77,6 +77,7 @@ add({ file: "guide", title: "The whole guide", group: "Guides", md: guide, src: 
 add({ file: "cli", title: "CLI reference", group: "Reference", md: read(join(SITE, "content", "cli.md")), src: null });
 add({ file: "architecture", title: "How it works", group: "Concepts", md: read(join(REPO, "docs", "architecture.md")), src: "docs/architecture.md" });
 add({ file: "algorithms", title: "Algorithms and guarantees", group: "Concepts", md: read(join(REPO, "docs", "algorithms.md")), src: "docs/algorithms.md" });
+add({ file: "experiments", title: "Backend parity and sampling experiments", group: "Concepts", md: read(join(REPO, "docs", "experiments.md")), src: "docs/experiments.md" });
 
 const ORDER = ["Getting started", "Guides", "Reference", "Concepts"];
 pages.sort((a, b) => ORDER.indexOf(a.group) - ORDER.indexOf(b.group));
@@ -101,6 +102,8 @@ function href(h, from) {
   if (name === "guide.md") return guideAnchor.get(hash) ? `${guideAnchor.get(hash)}.html` : `guide.html${anchor}`;
   if (name === "architecture.md") return `architecture.html${anchor}`;
   if (name === "algorithms.md") return `algorithms.html${anchor}`;
+  if (name === "experiments.md") return `experiments.html${anchor}`;
+  if (name === "sampling-results.csv") return `sampling-results.csv${anchor}`;
   // anything else points into the repository
   const repoPath = from ? join(dirname(from), path).split("\\").join("/") : path;
   const clean = repoPath.replace(/^(\.\.\/)+/, "");
@@ -231,6 +234,7 @@ ${html}
 
 mkdirSync(OUT, { recursive: true });
 for (const p of pages) writeFileSync(join(OUT, `${p.file}.html`), pageHtml(p, render(p)));
+copyFileSync(join(REPO, "docs", "sampling-results.csv"), join(OUT, "sampling-results.csv"));
 
 // ---------------------------------------------------------------- llms
 

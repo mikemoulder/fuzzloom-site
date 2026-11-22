@@ -33,6 +33,7 @@ Key facts: properties are `pub fn prop_<name>(args) -> bool`, differential targe
 
 - [How it works](https://fuzzloom.pages.dev/docs/architecture.html): Fuzzloom has two halves with a strict split.
 - [Algorithms and guarantees](https://fuzzloom.pages.dev/docs/algorithms.html): Every non-trivial algorithm in Fuzzloom states what it guarantees and where it stops, and has a test that fails if the guarantee breaks. This page collects
+- [Backend parity and sampling experiments](https://fuzzloom.pages.dev/docs/experiments.html): node scripts/check-integer-semantics.mjs generates and compares Fe functions that call the compiler's actual integer operators. Seed 7 exercised 100,000 bo
 
 ## Source
 

@@ -53,7 +53,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Concepts</p>
-          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li></ul>
+          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li><li><a href="experiments.html">Backend parity and sampling experiments</a></li></ul>
         </div>
     </nav>
   </aside>
@@ -115,7 +115,7 @@
 </tr>
 <tr>
 <td><code>--runs &lt;n&gt;</code></td>
-<td>Inputs per property (default 10,000) or per differential target (default 100,000)</td>
+<td>Positive input count per property (default 10,000) or differential target (default 100,000)</td>
 </tr>
 <tr>
 <td><code>--backend &lt;b&gt;</code></td>
@@ -123,11 +123,15 @@
 </tr>
 <tr>
 <td><code>--only &lt;text&gt;</code></td>
-<td>Only targets, or for <code>replay</code> saved failures, whose name contains the text</td>
+<td>Select targets or saved failures whose name contains the text. The source CLI exits 2 if none match</td>
 </tr>
 <tr>
 <td><code>--no-corpus</code></td>
 <td><code>fuzz</code> without the mutation campaigns around saved failures</td>
+</tr>
+<tr>
+<td><code>--uniform</code></td>
+<td>Available from source. Sample within the declared bounds with edge bias, argument correlation and corpus mutation disabled</td>
 </tr>
 <tr>
 <td><code>--json</code></td>

@@ -302,6 +302,29 @@ pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
         uses mut Ledger <- fixture_ledger(), FeePolicy <- fixture_policy()
 ```
 
+## Stateful sequences
+
+In an Fe test, `find_sequence` generates sequences of one to eight steps. Each step carries up to three bounded input words, so the first can select a command and the remaining words can provide its arguments. Provide an evaluator that creates a fresh fixture and calls `run_steps` inside its `with` block. The step function performs the operation and returns the invariant result after the operation.
+
+```fe
+fn evaluate_receipts(_ steps: Sequence) -> u64 {
+    var ledger = ReceiptLedger { seen: 0, balance: 0, model: 0 }
+    with (ReceiptLedger = ledger) { run_steps(steps, post_receipt) }
+}
+
+let result = find_sequence(
+    evaluate_receipts,
+    bounds: Bounds::full(3, 0, 0),
+    arity: 1,
+    max_steps: 8,
+    seed: 7,
+    runs: 20,
+    budget: 100,
+)
+```
+
+The [receipt ledger regression](../ingots/fuzzloom/src/sequence.fe) finds repeated crediting of the same receipt. The result contains the original sequence, its shrunk failure, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous deletions and per-word moves. Stateful campaigns are available through the Fe library. A panic from a step propagates through the test.
+
 
 ---
 
@@ -591,6 +614,29 @@ pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
         uses mut Ledger <- fixture_ledger(), FeePolicy <- fixture_policy()
 ```
 
+### Stateful sequences
+
+In an Fe test, `find_sequence` generates sequences of one to eight steps. Each step carries up to three bounded input words, so the first can select a command and the remaining words can provide its arguments. Provide an evaluator that creates a fresh fixture and calls `run_steps` inside its `with` block. The step function performs the operation and returns the invariant result after the operation.
+
+```fe
+fn evaluate_receipts(_ steps: Sequence) -> u64 {
+    var ledger = ReceiptLedger { seen: 0, balance: 0, model: 0 }
+    with (ReceiptLedger = ledger) { run_steps(steps, post_receipt) }
+}
+
+let result = find_sequence(
+    evaluate_receipts,
+    bounds: Bounds::full(3, 0, 0),
+    arity: 1,
+    max_steps: 8,
+    seed: 7,
+    runs: 20,
+    budget: 100,
+)
+```
+
+The [receipt ledger regression](../ingots/fuzzloom/src/sequence.fe) finds repeated crediting of the same receipt. The result contains the original sequence, its shrunk failure, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous deletions and per-word moves. Stateful campaigns are available through the Fe library. A panic from a step propagates through the test.
+
 ## 6. Restricting input ranges
 
 By default every argument ranges over its whole type. When a bug only exists in a narrow, meaningful region, declare it with a doc-comment line above the function:
@@ -788,10 +834,11 @@ fuzzloom <command> [path] [options]
 |---|---|
 | `--seed <n>` | Base seed. The CLI prints the seed so the input stream can be repeated |
 | `--digest-key <n>` | Reuse the recorded checkpoint key for `diff`. The default is sampled independently of the campaign seed |
-| `--runs <n>` | Inputs per property (default 10,000) or per differential target (default 100,000) |
+| `--runs <n>` | Positive input count per property (default 10,000) or differential target (default 100,000) |
 | `--backend <b>` | `sonatina` (EVM, the default) or `native` |
-| `--only <text>` | Only targets, or for `replay` saved failures, whose name contains the text |
+| `--only <text>` | Select targets or saved failures whose name contains the text. The source CLI exits 2 if none match |
 | `--no-corpus` | `fuzz` without the mutation campaigns around saved failures |
+| `--uniform` | Available from source. Sample within the declared bounds with edge bias, argument correlation and corpus mutation disabled |
 | `--json` | Machine-readable output |
 | `--junit <file>` | Also write a JUnit XML report: findings are `<failure>`, infrastructure problems are `<error>` |
 | `-h`, `--help` | The usage text |
@@ -1040,13 +1087,13 @@ Every non-trivial algorithm in Fuzzloom states what it guarantees and where it s
 
 **Per-property seeds.** `derive_seed(base, id) = splitmix64(base ^ splitmix64(id))`, where the CLI passes the 64-bit FNV-1a hash of the property name as `id`. Without this, every property in a run would draw the same stream and share its blind spots. A mutation campaign derives its seed from the property name together with the saved input.
 
-**Uniform ranges.** `below_or_eq(max)` draws uniformly from `0..=max` by masked rejection sampling. It draws a value of `bit_len(max)` bits and accepts it when it is at most `max`, otherwise draws again. Each draw succeeds with probability above 1/2, so the expected number of draws is below 2. A full-width maximum such as `2^256 - 1` takes the mask path and never rejects. Maxima below 2^64 use one 64-bit draw per attempt.
+**Uniform ranges.** `below_or_eq(max)` uses masked rejection sampling. It accepts a `bit_len(max)`-bit candidate when it is at most `max`. With independent, uniform bits this avoids modulo bias and needs fewer than two draws in expectation. Fuzzloom uses a deterministic 64-bit-state PRNG. At a given iteration it can produce at most `2^64` different 256-bit outputs across all seeds. The CLI's uniform mode disables edge substitutions, argument correlation and corpus mutation while keeping that PRNG. Maxima below 2^64 use one 64-bit word per attempt. A full-width maximum such as `2^256 - 1` accepts the assembled word in one attempt.
 
 | Guarantee | Test |
 |---|---|
 | Same seed, same stream; different seeds diverge; a zero seed is not stuck | `same_seed_same_stream`, `different_seeds_diverge`, `zero_seed_is_not_stuck` |
 | The stream matches a recorded reference | `known_answer_vector`, `splitmix64_matches_reference_vectors` |
-| No modulo bias. A range of about 2/3 of 2^256 is sampled uniformly, where reduction modulo `max + 1` would favour the lower third | `below_or_eq_is_unbiased_for_non_power_of_two_ranges` |
+| In the measured seed, the test detects the skew that reduction modulo `max + 1` would introduce on a range covering about 2/3 of the 256-bit domain | `below_or_eq_is_unbiased_for_non_power_of_two_ranges` |
 | Results never exceed `max`, including full-width maxima | `below_or_eq_respects_bound`, `below_or_eq_handles_full_width_maxima`, `full_width_maxima_use_the_exact_mask_path` |
 | Derived seeds differ per property and per base seed | `derived_seeds_differ_per_property_and_base` |
 
@@ -1252,3 +1299,46 @@ Every `fe test` invocation compiles its ingot once, about 2.4 s idle (`COMPILE_M
 | Per-name parsing in completion order; out-of-gas stays on its own test; a missing name or a payload-less `PASS` is `unparsed` | CLI: `batch` tests in `fe.test.ts` |
 | A compile error applies to every test | CLI: `batch output with a compile error applies it to every case` |
 | A known selector with a truncated body is infrastructure, not a crash | CLI: `a known selector with a truncated body is infra, not a crash` |
+
+
+---
+
+<!-- https://fuzzloom.pages.dev/docs/experiments.html -->
+
+# Backend parity and sampling experiments
+
+## Fe integer semantics on Fe 26.6.0
+
+`node scripts/check-integer-semantics.mjs` generates and compares Fe functions that call the compiler's actual integer operators. Seed 7 exercised 100,000 boundary-biased inputs per operation and type. All **116 keyed checkpoint campaigns** agreed across Sonatina and native, for **11.6 million input pairs**, and all **762 explicit edge evaluations** agreed. Backend agreement covers the sampled inputs and the reported outcomes.
+
+| Operation | Signed widths | Unsigned widths | Inputs per operation and type | Campaigns agreeing |
+| --- | --- | --- | ---: | ---: |
+| Wrapping addition | 8, 16, 32, 64, 128, 256 | Same | 100,000 | 12/12 |
+| Wrapping subtraction | 8, 16, 32, 64, 128, 256 | Same | 100,000 | 12/12 |
+| Wrapping multiplication | 8, 16, 32, 64, 128, 256 | Same | 100,000 | 12/12 |
+| Left shift | 8, 16, 32, 64, 128, 256 | Same | 100,000 | 12/12 |
+| Arithmetic or logical right shift | 8, 16, 32, 64, 128, 256 | Same | 100,000 | 12/12 |
+| Division | 8, 16, 32, 64, 128, 256 | Same | 100,000 | 12/12 |
+| Remainder | 8, 16, 32, 64, 128, 256 | Same | 100,000 | 12/12 |
+| Exponentiation | 8, 16, 32, 64, 128, 256 | Same | 100,000 | 12/12 |
+| Widen to 256 bits | 8, 16, 32, 64, 128 | Same | 100,000 | 10/10 |
+| Truncate from 256 bits | 8, 16, 32, 64, 128 | Same | 100,000 | 10/10 |
+
+For signed shifts the generator masks off the sign bit of the count. Explicit probes include width minus one, width, and width plus one where representable. Exponentiation limits the base and exponent to 0–3 to fit every type. Those campaigns repeatedly exercise a small domain. The division and remainder digests guard zero divisors and signed minimum divided by minus one so a trap cannot discard the checkpoint stream. The explicit evaluations exercise the original operations at those inputs. Both backends returned panic `0x11` for signed minimum divided by minus one at all six widths, and panic `0x12` on 84 division or remainder evaluations with zero divisors. Both returned zero for signed minimum modulo minus one.
+
+The JSON report records the fixed comparison key, every operation and result, and each explicit edge outcome. Matching fingerprints can collide. The operator matrix also does not establish whether two agreeing backends implement the language specification correctly.
+
+## Paired uniform sampling baseline
+
+`node scripts/measure-sampling.mjs sonatina` and `node scripts/measure-sampling.mjs native` ran seeds 1–20 on the six planted failures in vault-math and token-ledger. Each seed and sampler had a budget of 10,000 inputs and used the property's declared bounds. The measurement disables mutation and shrinking. For aborts, it recovers the first failing prefix in batched Fe runs and counts those invocations. The two backends produced identical rows, including the first failure positions and run counts. Each backend used 28 actual Fe invocations across 240 trials. A trial's Fe run count measures participation in shared invocations.
+
+| Target | Biased hits | Biased median first input | Biased Fe runs per trial | Uniform hits | Uniform median first input | Uniform Fe runs per trial |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `prop_fee_matches_exact_math` | 20/20 | 1 | 1 | 20/20 | 1 | 1 |
+| `prop_withdraw_never_overdraws` | 20/20 | 20.5 | 1 | 0/20 | — | 1 |
+| `prop_redeem_rounds_toward_vault` | 20/20 | 1 | 1 | 20/20 | 1 | 1 |
+| `prop_share_price_defined` | 20/20 | 18.5 | 2–17 | 0/20 | — | 1 |
+| `prop_transfer_conserves_supply` | 20/20 | 4 | 2–11 | 0/20 | — | 1 |
+| `prop_vested_never_exceeds_total` | 20/20 | 1 | 2–7 | 20/20 | 1 | 2 |
+
+The [paired results CSV](sampling-results.csv) records each seed, whether it found a failure, the first input when found, and the Fe run count for each sampler. The clearest wins came from inputs requiring a particular edge or a relation across arguments. The vesting defect already had a narrow declared range, and uniform sampling found it at the first input for all 20 seeds.

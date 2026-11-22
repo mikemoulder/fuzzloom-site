@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en" data-type="software" data-radius="sharp" data-buttons="tonal" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Backend parity and sampling experiments: Fuzzloom docs</title>
+<meta name="description" content="node scripts/check-integer-semantics.mjs generates and compares Fe functions that call the compiler's actual integer operators. Seed 7 exercised 100,000 bo">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Backend parity and sampling experiments: Fuzzloom docs">
+<meta property="og:image" content="../share.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0f1f10">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400..700&family=Figtree:wght@400..600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/system.css">
+<link rel="stylesheet" href="../assets/motion/motion.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+<header class="nav">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#doc">Skip to content</a>
+    <a class="nav__logo" href="../"><span class="mark" data-mark="dots" aria-hidden="true"></span>Fuzzloom <span class="docs__crumb">Docs</span></a>
+    <nav class="nav__links" aria-label="Main">
+      <div class="nav__item"><a class="nav__link" href="../">Home</a></div>
+      <div class="nav__item"><a class="nav__link" href="cli.html">CLI</a></div>
+      <div class="nav__item"><a class="nav__link" href="../llms.txt">llms.txt</a></div>
+    </nav>
+    <div class="nav__actions">
+      <a class="nav__link" href="https://github.com/MikeMoulder/fuzzloom">GitHub</a>
+      <a class="btn btn--primary" href="quickstart.html">Read the quick start</a>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+  </div>
+</header>
+<div class="docs__layout wrap">
+  <aside class="side" aria-label="Documentation">
+    <label class="side__search"><span class="sr-only">Find a page</span><input type="search" placeholder="Find a page" data-docs-search></label>
+    <nav>
+        <div class="side__group">
+          <p class="side__label">Getting started</p>
+          <ul><li><a href="index.html">Introduction</a></li><li><a href="quickstart.html">Quick start</a></li><li><a href="installation.html">Installation</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Guides</p>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Reference</p>
+          <ul><li><a href="configuration.html">Configuration</a></li><li><a href="troubleshooting.html">Troubleshooting</a></li><li><a href="cli.html">CLI reference</a></li></ul>
+        </div>
+        <div class="side__group">
+          <p class="side__label">Concepts</p>
+          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li><li><a href="experiments.html" aria-current="page">Backend parity and sampling experiments</a></li></ul>
+        </div>
+    </nav>
+  </aside>
+  <main class="doc" id="doc">
+    <p class="doc__crumbs"><a href="index.html">Docs</a> / Concepts</p>
+    <article class="prose">
+<h1 id="backend-parity-and-sampling-experiments">Backend parity and sampling experiments</h1>
+<h2 id="fe-integer-semantics-on-fe-2660"><a class="anchor" href="#fe-integer-semantics-on-fe-2660" aria-hidden="true" tabindex="-1">#</a>Fe integer semantics on Fe 26.6.0</h2>
+<p><code>node scripts/check-integer-semantics.mjs</code> generates and compares Fe functions that call the compiler&#39;s actual integer operators. Seed 7 exercised 100,000 boundary-biased inputs per operation and type. All <strong>116 keyed checkpoint campaigns</strong> agreed across Sonatina and native, for <strong>11.6 million input pairs</strong>, and all <strong>762 explicit edge evaluations</strong> agreed. Backend agreement covers the sampled inputs and the reported outcomes.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Signed widths</th>
+<th>Unsigned widths</th>
+<th align="right">Inputs per operation and type</th>
+<th align="right">Campaigns agreeing</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Wrapping addition</td>
+<td>8, 16, 32, 64, 128, 256</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">12/12</td>
+</tr>
+<tr>
+<td>Wrapping subtraction</td>
+<td>8, 16, 32, 64, 128, 256</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">12/12</td>
+</tr>
+<tr>
+<td>Wrapping multiplication</td>
+<td>8, 16, 32, 64, 128, 256</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">12/12</td>
+</tr>
+<tr>
+<td>Left shift</td>
+<td>8, 16, 32, 64, 128, 256</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">12/12</td>
+</tr>
+<tr>
+<td>Arithmetic or logical right shift</td>
+<td>8, 16, 32, 64, 128, 256</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">12/12</td>
+</tr>
+<tr>
+<td>Division</td>
+<td>8, 16, 32, 64, 128, 256</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">12/12</td>
+</tr>
+<tr>
+<td>Remainder</td>
+<td>8, 16, 32, 64, 128, 256</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">12/12</td>
+</tr>
+<tr>
+<td>Exponentiation</td>
+<td>8, 16, 32, 64, 128, 256</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">12/12</td>
+</tr>
+<tr>
+<td>Widen to 256 bits</td>
+<td>8, 16, 32, 64, 128</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">10/10</td>
+</tr>
+<tr>
+<td>Truncate from 256 bits</td>
+<td>8, 16, 32, 64, 128</td>
+<td>Same</td>
+<td align="right">100,000</td>
+<td align="right">10/10</td>
+</tr>
+</tbody></table>
+</div>
+<p>For signed shifts the generator masks off the sign bit of the count. Explicit probes include width minus one, width, and width plus one where representable. Exponentiation limits the base and exponent to 0–3 to fit every type. Those campaigns repeatedly exercise a small domain. The division and remainder digests guard zero divisors and signed minimum divided by minus one so a trap cannot discard the checkpoint stream. The explicit evaluations exercise the original operations at those inputs. Both backends returned panic <code>0x11</code> for signed minimum divided by minus one at all six widths, and panic <code>0x12</code> on 84 division or remainder evaluations with zero divisors. Both returned zero for signed minimum modulo minus one.</p>
+<p>The JSON report records the fixed comparison key, every operation and result, and each explicit edge outcome. Matching fingerprints can collide. The operator matrix also does not establish whether two agreeing backends implement the language specification correctly.</p>
+<h2 id="paired-uniform-sampling-baseline"><a class="anchor" href="#paired-uniform-sampling-baseline" aria-hidden="true" tabindex="-1">#</a>Paired uniform sampling baseline</h2>
+<p><code>node scripts/measure-sampling.mjs sonatina</code> and <code>node scripts/measure-sampling.mjs native</code> ran seeds 1–20 on the six planted failures in vault-math and token-ledger. Each seed and sampler had a budget of 10,000 inputs and used the property&#39;s declared bounds. The measurement disables mutation and shrinking. For aborts, it recovers the first failing prefix in batched Fe runs and counts those invocations. The two backends produced identical rows, including the first failure positions and run counts. Each backend used 28 actual Fe invocations across 240 trials. A trial&#39;s Fe run count measures participation in shared invocations.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th align="right">Biased hits</th>
+<th align="right">Biased median first input</th>
+<th align="right">Biased Fe runs per trial</th>
+<th align="right">Uniform hits</th>
+<th align="right">Uniform median first input</th>
+<th align="right">Uniform Fe runs per trial</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>prop_fee_matches_exact_math</code></td>
+<td align="right">20/20</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">20/20</td>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td><code>prop_withdraw_never_overdraws</code></td>
+<td align="right">20/20</td>
+<td align="right">20.5</td>
+<td align="right">1</td>
+<td align="right">0/20</td>
+<td align="right">—</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td><code>prop_redeem_rounds_toward_vault</code></td>
+<td align="right">20/20</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">20/20</td>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td><code>prop_share_price_defined</code></td>
+<td align="right">20/20</td>
+<td align="right">18.5</td>
+<td align="right">2–17</td>
+<td align="right">0/20</td>
+<td align="right">—</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td><code>prop_transfer_conserves_supply</code></td>
+<td align="right">20/20</td>
+<td align="right">4</td>
+<td align="right">2–11</td>
+<td align="right">0/20</td>
+<td align="right">—</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td><code>prop_vested_never_exceeds_total</code></td>
+<td align="right">20/20</td>
+<td align="right">1</td>
+<td align="right">2–7</td>
+<td align="right">20/20</td>
+<td align="right">1</td>
+<td align="right">2</td>
+</tr>
+</tbody></table>
+</div>
+<p>The <a href="sampling-results.csv">paired results CSV</a> records each seed, whether it found a failure, the first input when found, and the Fe run count for each sampler. The clearest wins came from inputs requiring a particular edge or a relation across arguments. The vesting defect already had a narrow declared range, and uniform sampling found it at the first input for all 20 seeds.</p>
+
+    </article>
+    <nav class="doc__pager" aria-label="Previous and next page">
+      <a class="doc__prev" href="algorithms.html"><span>Previous</span>Algorithms and guarantees</a>
+      <span></span>
+    </nav>
+    <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/experiments.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc" aria-label="On this page">
+    <p class="side__label">On this page</p><ul><li><a href="#fe-integer-semantics-on-fe-2660">Fe integer semantics on Fe 26.6.0</a></li><li><a href="#paired-uniform-sampling-baseline">Paired uniform sampling baseline</a></li></ul>
+  </aside>
+</div>
+<footer class="docs__footer">
+  <div class="wrap"><span>&copy; 2026 Fuzzloom &nbsp; Apache License 2.0</span><span><a href="https://github.com/MikeMoulder/fuzzloom">GitHub</a> &nbsp; <a href="https://www.npmjs.com/package/fuzzloom">npm</a> &nbsp; <a href="../llms-full.txt">llms-full.txt</a></span></div>
+</footer>
+<script type="module" src="../assets/system.js"></script>
+<script type="module" src="../assets/motion/motion.js"></script>
+<script type="module" src="docs.js"></script>
+</body>
+</html>

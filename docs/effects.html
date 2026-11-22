@@ -53,7 +53,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Concepts</p>
-          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li></ul>
+          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html">Algorithms and guarantees</a></li><li><a href="experiments.html">Backend parity and sampling experiments</a></li></ul>
         </div>
     </nav>
   </aside>
@@ -92,6 +92,23 @@ pub fn fixture_clock() -&gt; FixedClock { FixedClock { at: 1700000000 } }</code>
 <p><strong>Where the types live.</strong> The effect type must be defined in your ingot, or imported with a <code>use</code> line in the file that defines the target. <code>fuzzloom list</code> shows what each target uses and which fixture builds it:</p>
 <div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">  prop  prop_transfer_conserves_supply(amount: u128, to_bob: bool)  src/lib.fe:54
         uses mut Ledger &lt;- fixture_ledger(), FeePolicy &lt;- fixture_policy()</code></pre></div>
+<h2 id="stateful-sequences"><a class="anchor" href="#stateful-sequences" aria-hidden="true" tabindex="-1">#</a>Stateful sequences</h2>
+<p>In an Fe test, <code>find_sequence</code> generates sequences of one to eight steps. Each step carries up to three bounded input words, so the first can select a command and the remaining words can provide its arguments. Provide an evaluator that creates a fresh fixture and calls <code>run_steps</code> inside its <code>with</code> block. The step function performs the operation and returns the invariant result after the operation.</p>
+<div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">fn evaluate_receipts(_ steps: Sequence) -&gt; u64 {
+    var ledger = ReceiptLedger { seen: 0, balance: 0, model: 0 }
+    with (ReceiptLedger = ledger) { run_steps(steps, post_receipt) }
+}
+
+let result = find_sequence(
+    evaluate_receipts,
+    bounds: Bounds::full(3, 0, 0),
+    arity: 1,
+    max_steps: 8,
+    seed: 7,
+    runs: 20,
+    budget: 100,
+)</code></pre></div>
+<p>The <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/sequence.fe" rel="noopener">receipt ledger regression</a> finds repeated crediting of the same receipt. The result contains the original sequence, its shrunk failure, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous deletions and per-word moves. Stateful campaigns are available through the Fe library. A panic from a step propagates through the test.</p>
 
     </article>
     <nav class="doc__pager" aria-label="Previous and next page">
@@ -101,7 +118,7 @@ pub fn fixture_clock() -&gt; FixedClock { FixedClock { at: 1700000000 } }</code>
     <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/guide.md">Edit this page on GitHub</a></p>
   </main>
   <aside class="toc" aria-label="On this page">
-    
+    <p class="side__label">On this page</p><ul><li><a href="#stateful-sequences">Stateful sequences</a></li></ul>
   </aside>
 </div>
 <footer class="docs__footer">

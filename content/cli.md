@@ -23,10 +23,11 @@ fuzzloom <command> [path] [options]
 |---|---|
 | `--seed <n>` | Base seed. The CLI prints the seed so the input stream can be repeated |
 | `--digest-key <n>` | Reuse the recorded checkpoint key for `diff`. The default is sampled independently of the campaign seed |
-| `--runs <n>` | Inputs per property (default 10,000) or per differential target (default 100,000) |
+| `--runs <n>` | Positive input count per property (default 10,000) or differential target (default 100,000) |
 | `--backend <b>` | `sonatina` (EVM, the default) or `native` |
-| `--only <text>` | Only targets, or for `replay` saved failures, whose name contains the text |
+| `--only <text>` | Select targets or saved failures whose name contains the text. The source CLI exits 2 if none match |
 | `--no-corpus` | `fuzz` without the mutation campaigns around saved failures |
+| `--uniform` | Available from source. Sample within the declared bounds with edge bias, argument correlation and corpus mutation disabled |
 | `--json` | Machine-readable output |
 | `--junit <file>` | Also write a JUnit XML report: findings are `<failure>`, infrastructure problems are `<error>` |
 | `-h`, `--help` | The usage text |

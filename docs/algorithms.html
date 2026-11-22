@@ -53,7 +53,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Concepts</p>
-          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html" aria-current="page">Algorithms and guarantees</a></li></ul>
+          <ul><li><a href="architecture.html">How it works</a></li><li><a href="algorithms.html" aria-current="page">Algorithms and guarantees</a></li><li><a href="experiments.html">Backend parity and sampling experiments</a></li></ul>
         </div>
     </nav>
   </aside>
@@ -78,7 +78,7 @@
 <p><strong>Source:</strong> <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/rng.fe" rel="noopener"><code>ingots/fuzzloom/src/rng.fe</code></a></p>
 <p><strong>Generator.</strong> xorshift64* (Vigna, 2014): one 64-bit state word, shifts and one multiplication. It is small and fast on both backends, and fully specified in the source, so a seed replays the same stream everywhere. A zero seed is remapped so the state is never stuck at zero.</p>
 <p><strong>Per-property seeds.</strong> <code>derive_seed(base, id) = splitmix64(base ^ splitmix64(id))</code>, where the CLI passes the 64-bit FNV-1a hash of the property name as <code>id</code>. Without this, every property in a run would draw the same stream and share its blind spots. A mutation campaign derives its seed from the property name together with the saved input.</p>
-<p><strong>Uniform ranges.</strong> <code>below_or_eq(max)</code> draws uniformly from <code>0..=max</code> by masked rejection sampling. It draws a value of <code>bit_len(max)</code> bits and accepts it when it is at most <code>max</code>, otherwise draws again. Each draw succeeds with probability above 1/2, so the expected number of draws is below 2. A full-width maximum such as <code>2^256 - 1</code> takes the mask path and never rejects. Maxima below 2^64 use one 64-bit draw per attempt.</p>
+<p><strong>Uniform ranges.</strong> <code>below_or_eq(max)</code> uses masked rejection sampling. It accepts a <code>bit_len(max)</code>-bit candidate when it is at most <code>max</code>. With independent, uniform bits this avoids modulo bias and needs fewer than two draws in expectation. Fuzzloom uses a deterministic 64-bit-state PRNG. At a given iteration it can produce at most <code>2^64</code> different 256-bit outputs across all seeds. The CLI&#39;s uniform mode disables edge substitutions, argument correlation and corpus mutation while keeping that PRNG. Maxima below 2^64 use one 64-bit word per attempt. A full-width maximum such as <code>2^256 - 1</code> accepts the assembled word in one attempt.</p>
 <div class="table"><table>
 <thead>
 <tr>
@@ -95,7 +95,7 @@
 <td><code>known_answer_vector</code>, <code>splitmix64_matches_reference_vectors</code></td>
 </tr>
 <tr>
-<td>No modulo bias. A range of about 2/3 of 2^256 is sampled uniformly, where reduction modulo <code>max + 1</code> would favour the lower third</td>
+<td>In the measured seed, the test detects the skew that reduction modulo <code>max + 1</code> would introduce on a range covering about 2/3 of the 256-bit domain</td>
 <td><code>below_or_eq_is_unbiased_for_non_power_of_two_ranges</code></td>
 </tr>
 <tr>
@@ -463,7 +463,7 @@
     </article>
     <nav class="doc__pager" aria-label="Previous and next page">
       <a class="doc__prev" href="architecture.html"><span>Previous</span>How it works</a>
-      <span></span>
+      <a class="doc__next" href="experiments.html"><span>Next</span>Backend parity and sampling experiments</a>
     </nav>
     <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/algorithms.md">Edit this page on GitHub</a></p>
   </main>

@@ -1,6 +1,6 @@
 // Copies only what the site serves into dist/, for `wrangler pages deploy dist`.
 import { cpSync, rmSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const repo = resolve(process.env.FUZZLOOM_REPO ?? join(root, ".."));
 const out = join(root, "dist");
@@ -16,6 +16,10 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out);
 writeFileSync(join(out, "index.html"), index.replace(marker, `<span data-cli-version>CLI version ${version}</span>`));
 for (const p of ["favicon.svg", "share.jpg", "llms.txt", "llms-full.txt", "assets", "docs"]) {
-  cpSync(join(root, p), join(out, p), { recursive: true });
+  cpSync(join(root, p), join(out, p), {
+    recursive: true,
+    // Keep UI fragments, which the runtime loads as templates.
+    filter: (src) => p !== "assets" || !src.endsWith(".html") || basename(src) === "fragment.html",
+  });
 }
 console.log(`staged ${out}`);

@@ -6,7 +6,7 @@
 
 Fuzzloom is property-based testing and fuzzing for the [Fe](https://fe-lang.org) language, with differential testing between Fe's two backends.
 
-You write a **property** as an ordinary Fe function that returns `bool`. Fuzzloom generates thousands of inputs for it inside Fe and shrinks every failure to a small counterexample. It saves each failure so you can replay it after the fix. It also runs the same logic on **sonatina (EVM)** and **native**, and pins the first input on which they disagree.
+Write a **property** as a Fe function that returns `bool`. Fuzzloom generates inputs inside Fe, shrinks failures, and saves counterexamples for replay. It can also test ordered action traces against shared state and compare the same Fe logic on **Sonatina (EVM)** and **native**.
 
 ```fe
 /// A withdrawal is allowed only up to the balance.
@@ -31,20 +31,23 @@ FAIL  prop_withdraw_never_overdraws(u128, u128)  counterexample at input 19
 - **Inputs recovered from panics:** Fe cannot catch an abort. Fuzzloom finds the aborting input by searching on the run count, then shrinks it by replay.
 - **Effects:** a property can declare `uses (ledger: mut Ledger)`. Fuzzloom builds each effect from your `fixture_*()` function, fresh for every input.
 - **Input ranges:** `/// fuzzloom: start in 1668464000..=1700000000` restricts one argument everywhere, shrinking included.
-- **Backend comparison:** `diff` compares 100,000 inputs on sonatina and native and pins the first difference in 8 `fe` runs.
-- **A regression suite:** every failure is a JSON record. `replay` re-checks them, and `fuzz` mutates them to find a fix that only handled one input.
-- **CI output:** exit codes, `--json` and JUnit XML. Infrastructure problems (compile errors, out of gas) are never reported as findings.
+- **Backend comparison.** `diff` compares 100,000 inputs per target by default and verifies a located mismatch by running the exact input on both backends.
+- **Stateful sequences.** `sequence` checks a `seq_*` invariant across actions that share one effect fixture. It shrinks failing traces and saves the ordered actions for replay.
+- **Regression records.** `replay` checks saved failures against current code. `fuzz` also mutates saved property and abort inputs to exercise nearby cases.
+- **CI output.** `--strict` catches skipped selected targets before a campaign starts. `--json` reports campaign counts and `--junit` writes test results.
 
 ## What it does not do
 
 - **It does not prove a property.** A passing campaign means 10,000 well-chosen inputs found nothing, and the report says what they exercised.
-- **No sequences of calls yet.** Each input gets fresh fixtures.
+- **Bounded traces.** Sequences have at most eight actions. A panic during a sequence is an infrastructure outcome.
 - **Limited input types.** Integers and `bool` only, 1 to 3 arguments per property.
 
 ## Where to go next
 
 - [Quick start](quickstart.html): install and run your first property in a few minutes.
 - [Writing properties](writing-properties.html): the conventions and what can be an argument.
+- [Stateful sequences](stateful.html) walks through a receipt regression on both backends.
+- [Compiler experiments](experiments.html) includes the exact shift oracle and the external Fe Keccak integration.
 - [How it works](architecture.html) and [Algorithms and guarantees](algorithms.html), for the full picture.
 
 
@@ -72,7 +75,7 @@ node --version
 Run this from inside any Fe ingot (a directory with `fe.toml` and `src/`):
 
 ```bash
-npx fuzzloom doctor
+npx -y fuzzloom@0.1.3 doctor
 ```
 
 ```text
@@ -81,8 +84,7 @@ ok    fe                fe 26.6.0 (5b3f96a) at /home/you/.fe/bin/fe
 ok    Fe library        .../node_modules/fuzzloom/ingot
 ok    Library compiles  fe check passed
 ok    Native backend    fe 26.6.0 (5b3f96a) in this machine
-warn  Project           ingot my_ingot: 0 prop_* and 0 diff_* functions, 0 skipped
-                        write `pub fn prop_<name>(args) -> bool` (or diff_<name>) in the ingot's src/
+warn  Project           ingot my_ingot: 0 prop_*, 0 diff_*, 0 seq_* functions, 0 skipped
 ```
 
 The project warning goes away once you write your first property.
@@ -106,7 +108,7 @@ pub fn prop_fee_matches_exact_math(_ amount: u64) -> bool {
 ## 4. Fuzz it
 
 ```bash
-npx fuzzloom fuzz --seed 7
+npx -y fuzzloom@0.1.3 fuzz --strict --seed 7
 ```
 
 ```text
@@ -117,6 +119,8 @@ FAIL  prop_fee_matches_exact_math(u64)  counterexample at input 2
 ```
 
 `614891469123651721` is `u64::MAX / 30 + 1`, the smallest amount for which `amount * 30` wraps. The shrinker found the exact threshold. The seed makes the run repeatable; leave it out and Fuzzloom picks one at random and prints it.
+
+`--strict` exits 2 before running if Fuzzloom skips a selected target. Use `npx -y fuzzloom@0.1.3 list` to see each target and any skip reasons.
 
 ## 5. Fix it and replay
 
@@ -129,7 +133,7 @@ pub fn fee(_ amount: u64) -> u64 {
 ```
 
 ```bash
-npx fuzzloom replay
+npx -y fuzzloom@0.1.3 replay
 ```
 
 ```text
@@ -142,6 +146,7 @@ Commit `.fuzzloom/failures/`: it is your regression suite. Every later `fuzz` al
 
 - [Writing properties](writing-properties.html): types, labels and what gets skipped.
 - [Effects and fixtures](effects.html): properties that use state or context.
+- [Stateful sequences](stateful.html) tests repeated operations on a shared fixture and replays the saved trace.
 - [Differential testing](differential.html): compare sonatina and native.
 - [Running in CI](ci.html): exit codes and JUnit reports.
 
@@ -286,7 +291,7 @@ impl Clock for FixedClock { fn now(self) -> u64 { self.at } }
 pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
 ```
 
-**Fresh state every time.** Every evaluation builds every effect from its fixture again. Evaluations never see each other's changes, so a failure replays exactly, and shrinking compares like with like. A bug that only appears after a particular sequence of calls is therefore out of reach for now; see [what Fuzzloom does not do](../README.md#what-fuzzloom-does-not-do).
+**Fresh state every time.** A `prop_*` evaluation builds every effect from its fixture again. Evaluations never see each other's changes, so failure replay and shrink trials start from the same state. To check behavior across several calls that share a fixture, use [stateful sequences](#13-stateful-sequences).
 
 **When a target is skipped.** A target whose effect has no fixture, or several, is skipped with the reason:
 
@@ -304,7 +309,54 @@ pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
 
 ## Stateful sequences
 
-In an Fe test, `find_sequence` generates sequences of one to eight steps. Each step carries up to three bounded input words, so the first can select a command and the remaining words can provide its arguments. Provide an evaluator that creates a fresh fixture and calls `run_steps` inside its `with` block. The step function performs the operation and returns the invariant result after the operation.
+Use [stateful sequences](#13-stateful-sequences) for invariants that depend on several calls sharing the same effect fixture.
+
+
+---
+
+<!-- https://fuzzloom.pages.dev/docs/stateful.html -->
+
+# Stateful sequences
+
+Use `fuzzloom sequence` in CLI 0.1.3 to check an invariant across several operations on shared state. A public `seq_*` function performs one operation and returns `bool` after checking the invariant. Its one to three scalar arguments and effect fixtures follow the same rules as [properties with effects](#5-properties-with-effects). All steps in one trace share the fixtures. Every new trace, replay and shrink attempt builds them again.
+
+## Reproduce a receipt regression
+
+The [receipt-ledger example](../examples/receipt-ledger) has a planted duplicate-credit bug. From a Fuzzloom checkout on Fe 26.6.0, start with one action per trace:
+
+```bash
+npx -y fuzzloom@0.1.3 sequence examples/receipt-ledger \
+  --strict --seed 7 --runs 32 --steps 1
+```
+
+All 32 traces pass. Remove `--steps 1` to allow up to eight actions and exercise duplicate receipt posting:
+
+```bash
+npx -y fuzzloom@0.1.3 sequence examples/receipt-ledger \
+  --strict --seed 7 --runs 32
+```
+
+```text
+FAIL seq_credit_once, trace 2: 4 to 2 steps
+step 1: id = 0
+step 2: id = 0
+```
+
+The failing campaign exits 1 and saves the two receipt posts in order. Add `--backend native` to generate and save the same failing trace for native. Each backend has its own failure record. Run `replay` to check the records against the current code:
+
+```bash
+npx -y fuzzloom@0.1.3 replay examples/receipt-ledger --only seq_credit_once
+```
+
+To check the whole lifecycle in a temporary copy, run `node scripts/check-sequence-workflow.mjs` from the checkout. It verifies the failure on both backends, applies a guard against duplicate credit, checks `FIXED`, then restores the original code and checks `REGRESSED`.
+
+## Interpret the result
+
+The default maximum is eight actions. Set `--steps` to a value from 1 to 8 and `--runs` to control the trace budget per target. A failed invariant produces a replayable trace. A panic during a sequence is reported as infrastructure. Replay uses the recorded actions and backend, so it can check the counterexample after the seed or generator changes.
+
+## Use sequences inside a Fe test
+
+`find_sequence` generates bounded traces with up to three input words per step. A word can select an operation while the other words supply arguments. Provide an evaluator that creates a fresh fixture and calls `run_steps` under a `with` block.
 
 ```fe
 fn evaluate_receipts(_ steps: Sequence) -> u64 {
@@ -323,7 +375,7 @@ let result = find_sequence(
 )
 ```
 
-The [receipt ledger regression](../ingots/fuzzloom/src/sequence.fe) finds repeated crediting of the same receipt. The result contains the original sequence, its shrunk failure, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous deletions and per-word moves. Stateful campaigns are available through the Fe library. A panic from a step propagates through the test.
+The Fe report contains the original sequence, the shrunk failing trace, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous power-of-two deletions or the floor and halfway moves on individual words and equal words in the same argument position. A panic from a step propagates through the Fe test.
 
 
 ---
@@ -395,7 +447,7 @@ Targets may use effects and declared ranges exactly as properties do. `diff` nee
 
 # Saved failures
 
-Every `FAIL`, `ABORT` and `DIVERGE` is saved to `.fuzzloom/failures/<target>-<hash>.json`. The record holds the shrunk input, the original input, the seed, the iteration, the backend and the fe version, plus a human-readable value per argument. **Commit this directory.** It is a regression suite that grows on its own.
+Every `FAIL`, `ABORT` and `DIVERGE` is saved to `.fuzzloom/failures/<target>-<hash>.json`. Single-input records store the shrunk and original inputs where available. Stateful records store the ordered shrunk trace for the backend that found it. Records also include the seed, iteration, backend and Fe version. Commit this directory to keep the findings as regression tests.
 
 ```bash
 npx fuzzloom replay                 # re-check every saved failure
@@ -425,6 +477,8 @@ FAIL  prop_x(u256)  counterexample at mutant 37 of saved failure prop_x-1a2b3c4d
 
 Exit codes make Fuzzloom a normal CI step: `1` fails the build on a finding, and `2` fails it on an infrastructure problem. Pin a seed for a deterministic check, or leave it random to explore further on every run. The seed is printed either way. `--junit` writes a report that test dashboards understand. Findings become `<failure>` and infrastructure problems become `<error>`, so a dashboard never shows out-of-gas as a broken property.
 
+Starting in CLI version 0.1.3, add `--strict` to `fuzz`, `diff`, or `sequence` to turn skipped candidates in the selected command and `--only` scope into JUnit errors and exit 2 before any campaigns run. Campaign JSON includes selected, runnable, skipped, run and completed target counts. For fuzz and sequence, the input count stops at each reported first finding or the end of the successful campaign. For diff, it counts the input pairs in completed campaigns. It excludes auxiliary search rounds, mutation trials outside the reported outcome, and infrastructure outcomes.
+
 GitHub Actions, on Linux so the native backend is available:
 
 ```yaml
@@ -434,11 +488,13 @@ GitHub Actions, on Linux so the native backend is available:
   run: |
     curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.6.0
     echo "$HOME/.fe/bin" >> "$GITHUB_PATH"
-- run: npx -y fuzzloom doctor
-- run: npx -y fuzzloom replay --junit reports/replay.xml     # saved failures stay fixed
-- run: npx -y fuzzloom fuzz --junit reports/fuzz.xml          # new inputs every run
-- run: npx -y fuzzloom diff --junit reports/diff.xml          # sonatina against native
+- run: npx -y fuzzloom@0.1.3 doctor
+- run: npx -y fuzzloom@0.1.3 replay --junit reports/replay.xml
+- run: npx -y fuzzloom@0.1.3 fuzz --strict --junit reports/fuzz.xml
+- run: npx -y fuzzloom@0.1.3 diff --strict --junit reports/diff.xml
 ```
+
+If your ingot declares `seq_*` targets, add `npx -y fuzzloom@0.1.3 sequence --strict --seed 7 --junit reports/sequence.xml`. Add `--backend native` in a separate job to run the same trace stream on the native backend. An empty selection exits 2, so include only the campaign commands that have targets in your ingot.
 
 Fuzzloom's own pipeline, [`scripts/ci.sh`](../scripts/ci.sh), is a complete working example. It runs on CircleCI.
 
@@ -478,6 +534,7 @@ From a first property to a regression suite in CI. For how Fuzzloom works inside
 10. [Configuration](#10-configuration)
 11. [Troubleshooting](#11-troubleshooting)
 12. [Writing good properties](#12-writing-good-properties)
+13. [Stateful sequences](#13-stateful-sequences)
 
 ## 1. Install and check
 
@@ -598,7 +655,7 @@ impl Clock for FixedClock { fn now(self) -> u64 { self.at } }
 pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
 ```
 
-**Fresh state every time.** Every evaluation builds every effect from its fixture again. Evaluations never see each other's changes, so a failure replays exactly, and shrinking compares like with like. A bug that only appears after a particular sequence of calls is therefore out of reach for now; see [what Fuzzloom does not do](../README.md#what-fuzzloom-does-not-do).
+**Fresh state every time.** A `prop_*` evaluation builds every effect from its fixture again. Evaluations never see each other's changes, so failure replay and shrink trials start from the same state. To check behavior across several calls that share a fixture, use [stateful sequences](#13-stateful-sequences).
 
 **When a target is skipped.** A target whose effect has no fixture, or several, is skipped with the reason:
 
@@ -616,26 +673,7 @@ pub fn fixture_clock() -> FixedClock { FixedClock { at: 1700000000 } }
 
 ### Stateful sequences
 
-In an Fe test, `find_sequence` generates sequences of one to eight steps. Each step carries up to three bounded input words, so the first can select a command and the remaining words can provide its arguments. Provide an evaluator that creates a fresh fixture and calls `run_steps` inside its `with` block. The step function performs the operation and returns the invariant result after the operation.
-
-```fe
-fn evaluate_receipts(_ steps: Sequence) -> u64 {
-    var ledger = ReceiptLedger { seen: 0, balance: 0, model: 0 }
-    with (ReceiptLedger = ledger) { run_steps(steps, post_receipt) }
-}
-
-let result = find_sequence(
-    evaluate_receipts,
-    bounds: Bounds::full(3, 0, 0),
-    arity: 1,
-    max_steps: 8,
-    seed: 7,
-    runs: 20,
-    budget: 100,
-)
-```
-
-The [receipt ledger regression](../ingots/fuzzloom/src/sequence.fe) finds repeated crediting of the same receipt. The result contains the original sequence, its shrunk failure, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous deletions and per-word moves. Stateful campaigns are available through the Fe library. A panic from a step propagates through the test.
+Use [stateful sequences](#13-stateful-sequences) for invariants that depend on several calls sharing the same effect fixture.
 
 ## 6. Restricting input ranges
 
@@ -692,7 +730,7 @@ Targets may use effects and declared ranges exactly as properties do. `diff` nee
 
 ## 8. Saved failures as a regression suite
 
-Every `FAIL`, `ABORT` and `DIVERGE` is saved to `.fuzzloom/failures/<target>-<hash>.json`. The record holds the shrunk input, the original input, the seed, the iteration, the backend and the fe version, plus a human-readable value per argument. **Commit this directory.** It is a regression suite that grows on its own.
+Every `FAIL`, `ABORT` and `DIVERGE` is saved to `.fuzzloom/failures/<target>-<hash>.json`. Single-input records store the shrunk and original inputs where available. Stateful records store the ordered shrunk trace for the backend that found it. Records also include the seed, iteration, backend and Fe version. Commit this directory to keep the findings as regression tests.
 
 ```bash
 npx fuzzloom replay                 # re-check every saved failure
@@ -717,6 +755,8 @@ FAIL  prop_x(u256)  counterexample at mutant 37 of saved failure prop_x-1a2b3c4d
 
 Exit codes make Fuzzloom a normal CI step: `1` fails the build on a finding, and `2` fails it on an infrastructure problem. Pin a seed for a deterministic check, or leave it random to explore further on every run. The seed is printed either way. `--junit` writes a report that test dashboards understand. Findings become `<failure>` and infrastructure problems become `<error>`, so a dashboard never shows out-of-gas as a broken property.
 
+Starting in CLI version 0.1.3, add `--strict` to `fuzz`, `diff`, or `sequence` to turn skipped candidates in the selected command and `--only` scope into JUnit errors and exit 2 before any campaigns run. Campaign JSON includes selected, runnable, skipped, run and completed target counts. For fuzz and sequence, the input count stops at each reported first finding or the end of the successful campaign. For diff, it counts the input pairs in completed campaigns. It excludes auxiliary search rounds, mutation trials outside the reported outcome, and infrastructure outcomes.
+
 GitHub Actions, on Linux so the native backend is available:
 
 ```yaml
@@ -726,11 +766,13 @@ GitHub Actions, on Linux so the native backend is available:
   run: |
     curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.6.0
     echo "$HOME/.fe/bin" >> "$GITHUB_PATH"
-- run: npx -y fuzzloom doctor
-- run: npx -y fuzzloom replay --junit reports/replay.xml     # saved failures stay fixed
-- run: npx -y fuzzloom fuzz --junit reports/fuzz.xml          # new inputs every run
-- run: npx -y fuzzloom diff --junit reports/diff.xml          # sonatina against native
+- run: npx -y fuzzloom@0.1.3 doctor
+- run: npx -y fuzzloom@0.1.3 replay --junit reports/replay.xml
+- run: npx -y fuzzloom@0.1.3 fuzz --strict --junit reports/fuzz.xml
+- run: npx -y fuzzloom@0.1.3 diff --strict --junit reports/diff.xml
 ```
+
+If your ingot declares `seq_*` targets, add `npx -y fuzzloom@0.1.3 sequence --strict --seed 7 --junit reports/sequence.xml`. Add `--backend native` in a separate job to run the same trace stream on the native backend. An empty selection exits 2, so include only the campaign commands that have targets in your ingot.
 
 Fuzzloom's own pipeline, [`scripts/ci.sh`](../scripts/ci.sh), is a complete working example. It runs on CircleCI.
 
@@ -755,7 +797,7 @@ Everything is a command-line option or an environment variable. There is no conf
 
 **`Native backend: fe not runnable in WSL`.** Install fe inside your WSL distro (`feup` works there too), or point `FE_WSL_DISTRO` and `FE_WSL_BIN` at it. Only `diff` and `--backend native` need it.
 
-**A property you wrote is missing from `list`.** It is either not `pub`, not named `prop_`/`diff_`, or skipped. Skipped functions are listed with the reason.
+**A target you wrote is missing from `list`.** Check that it is public and starts with `prop_`, `diff_` or `seq_`. The skipped section shows unsupported signatures and fixtures with their reasons.
 
 **`fe fmt --check` complains about `.fuzzloom/tmp`.** Generated harnesses are removed at the end of every command, and kept only after an infrastructure error. Delete the directory, or fix the infrastructure error and rerun.
 
@@ -768,6 +810,67 @@ Everything is a command-line option or an environment variable. There is no conf
 - **Monotonicity.** Depositing more never yields fewer shares; a schedule that started later has vested no more.
 - **Guard preconditions by returning `true`.** If an input is outside the function's contract, `if amount > balance { return true }` keeps it from being reported. Prefer an [input range](#6-restricting-input-ranges) when the region is contiguous, so no runs are wasted.
 - **Let aborts be findings.** A property does not need to catch overflow. An abort is reported with its input recovered, which is usually exactly the bug.
+
+## 13. Stateful sequences
+
+Use `fuzzloom sequence` in CLI 0.1.3 to check an invariant across several operations on shared state. A public `seq_*` function performs one operation and returns `bool` after checking the invariant. Its one to three scalar arguments and effect fixtures follow the same rules as [properties with effects](#5-properties-with-effects). All steps in one trace share the fixtures. Every new trace, replay and shrink attempt builds them again.
+
+### Reproduce a receipt regression
+
+The [receipt-ledger example](../examples/receipt-ledger) has a planted duplicate-credit bug. From a Fuzzloom checkout on Fe 26.6.0, start with one action per trace:
+
+```bash
+npx -y fuzzloom@0.1.3 sequence examples/receipt-ledger \
+  --strict --seed 7 --runs 32 --steps 1
+```
+
+All 32 traces pass. Remove `--steps 1` to allow up to eight actions and exercise duplicate receipt posting:
+
+```bash
+npx -y fuzzloom@0.1.3 sequence examples/receipt-ledger \
+  --strict --seed 7 --runs 32
+```
+
+```text
+FAIL seq_credit_once, trace 2: 4 to 2 steps
+step 1: id = 0
+step 2: id = 0
+```
+
+The failing campaign exits 1 and saves the two receipt posts in order. Add `--backend native` to generate and save the same failing trace for native. Each backend has its own failure record. Run `replay` to check the records against the current code:
+
+```bash
+npx -y fuzzloom@0.1.3 replay examples/receipt-ledger --only seq_credit_once
+```
+
+To check the whole lifecycle in a temporary copy, run `node scripts/check-sequence-workflow.mjs` from the checkout. It verifies the failure on both backends, applies a guard against duplicate credit, checks `FIXED`, then restores the original code and checks `REGRESSED`.
+
+### Interpret the result
+
+The default maximum is eight actions. Set `--steps` to a value from 1 to 8 and `--runs` to control the trace budget per target. A failed invariant produces a replayable trace. A panic during a sequence is reported as infrastructure. Replay uses the recorded actions and backend, so it can check the counterexample after the seed or generator changes.
+
+### Use sequences inside a Fe test
+
+`find_sequence` generates bounded traces with up to three input words per step. A word can select an operation while the other words supply arguments. Provide an evaluator that creates a fresh fixture and calls `run_steps` under a `with` block.
+
+```fe
+fn evaluate_receipts(_ steps: Sequence) -> u64 {
+    var ledger = ReceiptLedger { seen: 0, balance: 0, model: 0 }
+    with (ReceiptLedger = ledger) { run_steps(steps, post_receipt) }
+}
+
+let result = find_sequence(
+    evaluate_receipts,
+    bounds: Bounds::full(3, 0, 0),
+    arity: 1,
+    max_steps: 8,
+    seed: 7,
+    runs: 20,
+    budget: 100,
+)
+```
+
+The Fe report contains the original sequence, the shrunk failing trace, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous power-of-two deletions or the floor and halfway moves on individual words and equal words in the same argument position. A panic from a step propagates through the Fe test.
 
 
 ---
@@ -800,7 +903,7 @@ Everything is a command-line option or an environment variable. There is no conf
 
 **`Native backend: fe not runnable in WSL`.** Install fe inside your WSL distro (`feup` works there too), or point `FE_WSL_DISTRO` and `FE_WSL_BIN` at it. Only `diff` and `--backend native` need it.
 
-**A property you wrote is missing from `list`.** It is either not `pub`, not named `prop_`/`diff_`, or skipped. Skipped functions are listed with the reason.
+**A target you wrote is missing from `list`.** Check that it is public and starts with `prop_`, `diff_` or `seq_`. The skipped section shows unsupported signatures and fixtures with their reasons.
 
 **`fe fmt --check` complains about `.fuzzloom/tmp`.** Generated harnesses are removed at the end of every command, and kept only after an infrastructure error. Delete the directory, or fix the infrastructure error and rerun.
 
@@ -817,6 +920,8 @@ fuzzloom <command> [path] [options]
 
 `path` is the Fe ingot to work on, a directory with `fe.toml` and `src/`. It defaults to the current directory.
 
+The examples use [Fuzzloom 0.1.3](https://www.npmjs.com/package/fuzzloom/v/0.1.3). Run installed commands as `npx -y fuzzloom@0.1.3 <command>` when you want a pinned version.
+
 ## Commands
 
 | Command | What it does |
@@ -825,7 +930,8 @@ fuzzloom <command> [path] [options]
 | `fuzzloom list [path]` | Lists every target with its signature, effects, fixtures and declared ranges, and every skipped function with the reason |
 | `fuzzloom fuzz [path]` | Runs every property campaign, plus one mutation campaign per saved failure, then recovers and shrinks any abort |
 | `fuzzloom diff [path]` | Compares keyed checkpoints on sonatina and native and verifies the located mismatch |
-| `fuzzloom reproduce <id> [path]` | Replays one saved failure from its stored input, with no random generation |
+| `fuzzloom sequence [path]` | Generates and shrinks traces of `seq_*` actions on one backend and saves a failing trace for replay |
+| `fuzzloom reproduce <id> [path]` | Replays one saved input or ordered trace |
 | `fuzzloom replay [path]` | Replays every saved failure: `FIXED` when it now passes, `FAILS` when it still fails, `REGRESSED` when a fixed one is back |
 
 ## Options
@@ -834,11 +940,13 @@ fuzzloom <command> [path] [options]
 |---|---|
 | `--seed <n>` | Base seed. The CLI prints the seed so the input stream can be repeated |
 | `--digest-key <n>` | Reuse the recorded checkpoint key for `diff`. The default is sampled independently of the campaign seed |
-| `--runs <n>` | Positive input count per property (default 10,000) or differential target (default 100,000) |
+| `--runs <n>` | Positive budget per target. Defaults to 10,000 property inputs, 100,000 differential input pairs, or 1,000 traces |
+| `--steps <n>` | For `sequence`, limit each trace to 1–8 actions. The default is 8 |
 | `--backend <b>` | `sonatina` (EVM, the default) or `native` |
-| `--only <text>` | Select targets or saved failures whose name contains the text. The source CLI exits 2 if none match |
+| `--only <text>` | Select targets or saved failures whose name contains the text. Empty campaign selections exit 2 |
+| `--strict` | For `fuzz`, `diff`, and `sequence`, exit 2 before running if a selected target was skipped |
 | `--no-corpus` | `fuzz` without the mutation campaigns around saved failures |
-| `--uniform` | In 0.1.2, sample within the declared bounds with edge bias, argument correlation and corpus mutation disabled |
+| `--uniform` | For `fuzz`, sample within declared bounds with edge bias, argument correlation, and corpus mutation disabled |
 | `--json` | Machine-readable output |
 | `--junit <file>` | Also write a JUnit XML report: findings are `<failure>`, infrastructure problems are `<error>` |
 | `-h`, `--help` | The usage text |
@@ -849,7 +957,7 @@ fuzzloom <command> [path] [options]
 |---|---|
 | `0` | Everything passed |
 | `1` | A property failed or aborted, or the backends diverged |
-| `2` | An infrastructure error: a compile error, out of gas, a timeout, a missing backend or unreadable output. Never a finding |
+| `2` | An infrastructure or selection error, including an empty campaign, a selected skip under `--strict`, a compile error, a timeout, or out of gas |
 
 ## Result lines
 
@@ -857,6 +965,7 @@ fuzzloom <command> [path] [options]
 |---|---|---|
 | `PASS` | `fuzz` | No input failed; the next line says what the campaign exercised |
 | `FAIL` | `fuzz` | The property returned `false`; the shrunk and original inputs follow |
+| `FAIL` | `sequence` | An invariant returned `false` after an action. The output includes the ordered shrunk trace |
 | `ABORT` | `fuzz` | The property panicked or reverted; the recovered and shrunk input follows |
 | `AGREE` | `diff` | Identical digests on both backends |
 | `DIVERGE` | `diff` | The first differing input, with both outputs |
@@ -866,7 +975,7 @@ fuzzloom <command> [path] [options]
 
 | Path | What it holds |
 |---|---|
-| `.fuzzloom/failures/<target>-<hash>.json` | One saved failure: the shrunk and original inputs, seed, iteration, backend and fe version. Commit these |
+| `.fuzzloom/failures/<target>-<hash>.json` | One saved input or ordered trace, with seed, iteration, backend, and Fe version. Commit these records to replay them in CI |
 | `.fuzzloom/tmp/` | Generated test harnesses. Removed when a command ends, kept only after an infrastructure error |
 
 ## Environment
@@ -879,6 +988,8 @@ fuzzloom <command> [path] [options]
 | `FUZZLOOM_TIMEOUT_MS` | `600000` | Per `fe` invocation |
 | `FUZZLOOM_INGOT` | the bundled copy | Use a different checkout of the Fe library |
 | `NO_COLOR` | unset | Plain output |
+
+See [Stateful sequences](stateful.html) for the receipt walkthrough and [Running in CI](ci.html) for strict selection and campaign counts.
 
 
 ---
@@ -911,7 +1022,8 @@ flowchart TB
     GEN --> CHK["check, property, shrink"]
     GEN --> MUT["mutate"]
     GEN --> DIF["diff"]
-    CHK & MUT & DIF --> PAY["payload"]
+    GEN --> SEQ["sequence"]
+    CHK & MUT & DIF & SEQ --> PAY["payload"]
   end
   HAR -. "imports" .-> LIB
   FE -- "fe test (sonatina)" --> X1["generated ingot"]
@@ -932,6 +1044,7 @@ flowchart TB
 | `check.fe` | Campaigns (`find`, `check`, `check_bounded`), `replay`, `input_at` |
 | `mutate.fe` | Mutation campaigns around a saved input: `check_mutating`, `mutant_at`, `mutated_at` |
 | `diff.fe` | `Target` and `target1/2/3`; digests, checkpoints, `evaluate`, `target_input_at` |
+| `sequence.fe` | Generate and replay action traces, trim to the first failing step, and minimize the failing prefix |
 | `payload.fe` | The `#[error]` structs that carry every result out of Fe |
 
 **Generic over effects.** A property is any `Fn` returning `bool`. The wrappers declare `uses E = F::E`, so a property's effects flow through `check(...)` to the caller, who provides them with `with`. The library therefore never needs to know which effects a user's code has. A generic callable needs `uses F::E` at every level, and the library is written that way throughout.
@@ -944,7 +1057,7 @@ flowchart TB
 
 ### Discovery (`discover.ts`)
 
-Discovery reads every `.fe` file under `src/`, with comments blanked so commented-out code is ignored and line numbers stay right. It matches `pub fn prop_*` and `pub fn diff_*` signatures, including ones that `fe fmt` wrapped across lines. For each match it:
+Discovery reads `.fe` files under `src/` and masks comments and literals while preserving line numbers. It identifies `pub fn prop_*`, `pub fn diff_*` and `pub fn seq_*` candidates by name before checking signatures, including signatures that `fe fmt` wrapped across lines. For each module-level candidate it does the following.
 
 1. parses the parameters and keeps each argument's label: positional (`_ x`), the name, or an explicit label;
 2. parses a `uses (...)` clause into effect types;
@@ -952,7 +1065,7 @@ Discovery reads every `.fe` file under `src/`, with comments blanked so commente
 4. resolves each effect to exactly one fixture, by return type or else by snake-case name;
 5. computes the Fe import paths for the target, its effect types and its fixtures from the file layout (`src/a/b.fe` is `<ingot>::a::b`).
 
-Anything that cannot be tested is returned as skipped, with the reason.
+A candidate that cannot be tested is listed as skipped with its location and reason. With `--strict`, any skip within the selected command and `--only` scope prevents campaign execution.
 
 ### Harness generation (`harness.ts`)
 
@@ -990,6 +1103,7 @@ Harness modes:
 | `checkpoints` | `keyed_checkpoints_within` | Up to 256 keyed prefix digests in one pass |
 | `target_input_at` | `target_input_at(_within)` | The input a digest drew at an iteration |
 | `evaluate`, `evaluate_at` | `evaluate` | One differential output |
+| `check_sequence`, `replay_sequence` | `check_sequence`, `replay_sequence` | Generate and shrink traces or execute a saved trace. The harness creates a fresh fixture on every call, and steps in that call share it |
 
 ### Running fe and classifying (`fe.ts`, `abi.ts`)
 
@@ -1005,6 +1119,7 @@ The engine thinks in **rounds**. Each `fe test` invocation compiles once, so eve
 |---|---|
 | `fuzz` | 1 round: every property's campaign, plus one mutation campaign per saved failure. For each abort: k-ary search rounds on the run count, 1 recovery round (`input_at` + `replay_at`), then shrink-by-replay rounds |
 | `diff` | 1 round on each backend at once: 256 checkpoints per target. For each divergence: search rounds of one checkpoint test per backend, then 1 recovery round |
+| `sequence` | One round on the selected backend. Fe runs the action traces and shrink trials within each target's test |
 | `replay`, `reproduce` | 1 round per backend that has records, both at once |
 
 Results are combined per target in a fixed order of precedence:
@@ -1014,7 +1129,7 @@ Results are combined per target in a fixed order of precedence:
 
 ### Failure records (`store.ts`)
 
-`.fuzzloom/failures/<target>-<fnv8>.json`, version 1. The id is a hash of the target name and the shrunk input, so finding the same minimal failure again updates the record instead of duplicating it.
+Records live at `.fuzzloom/failures/<target>-<hash>.json` and use schema version 1. Single-input records use the legacy eight-digit hash. Sequence records use a sixteen-digit hash of the ordered trace and backend. Running a backend again with the same shrunk trace updates its record and preserves the other backend's verdict.
 
 ```json
 {
@@ -1035,7 +1150,7 @@ Results are combined per target in a fixed order of precedence:
 }
 ```
 
-`kind` is `property`, `abort` (with `detail`, the panic reason) or `differential` (backend `both`, with both outputs in `detail`). A record found by a mutation campaign carries `seeded_by`. Records are only ever replayed with their stored input, so they stay valid when the generator changes. `replay` refuses a record whose target changed signature, and says so.
+`kind` is `property`, `abort` (with the panic reason in `detail`), `differential` (backend `both`, with both outputs in `detail`) or `sequence` (with an ordered `sequence` array of typed input words). A record found by a mutation campaign carries `seeded_by`. Replay uses the stored input or trace, so it still works when the generator changes. A changed target signature is reported as an infrastructure error.
 
 ### Reports (`report.ts`, `junit.ts`)
 
@@ -1306,6 +1421,24 @@ Every `fe test` invocation compiles its ingot once, about 2.4 s idle (`COMPILE_M
 <!-- https://fuzzloom.pages.dev/docs/experiments.html -->
 
 # Backend parity and sampling experiments
+
+## Exact 8-bit shift oracle
+
+Run `node scripts/check-shift-oracle.mjs` with Fe 26.6.0 (`5b3f96a`). The BigInt model computes left shift with multiplication and truncation, and arithmetic right shift with division rounded toward negative infinity. It generates exact expected bytes, then Fe compares every computed byte directly. Unsigned cases cover all 256 input bytes and all 256 shift counts. Signed cases cover all 256 input bytes and the 128 nonnegative counts representable by `i8`. Both operators are exercised on both backends.
+
+| Operation | Exact comparisons per backend | Sonatina | Native |
+| --- | ---: | --- | --- |
+| `u8 <<` | 65,536 | Matched | Matched |
+| `u8 >>` | 65,536 | Matched | Matched |
+| `i8 <<` | 32,768 | Matched | Matched |
+| `i8 >>` | 32,768 | Matched | Matched |
+| Corrupted expected byte at input 0, count 0 | 1 | Detected | Detected |
+
+The Fe harness still evaluates counts above the bit width. The expected table reuses row 8 because the reference saturates there. The negative control verifies that a disagreement reports the concrete input, expected byte, and observed byte.
+
+## Published CLI against another Fe project
+
+`bash scripts/check-external-ingot.sh /path/to/fuzzloom` creates a temporary consumer for the pinned [Fe Keccak ingot](https://github.com/fe-lang/keccak/tree/345d5088de986fe54b23a6aaa3a33e1c349d0960). The public npm 0.1.2 package discovered both targets. On Fe 26.6.0, each backend passed 32 streaming checks against the Ethereum Keccak-256 digest of `abc`, and 128 single-byte hash inputs agreed across the backends. The Fuzzloom pipeline includes this check. The upstream library remains an external dependency of this test.
 
 ## Fe integer semantics on Fe 26.6.0
 

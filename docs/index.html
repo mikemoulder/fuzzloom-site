@@ -45,7 +45,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Guides</p>
-          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="stateful.html">Stateful sequences</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
         </div>
         <div class="side__group">
           <p class="side__label">Reference</p>
@@ -62,7 +62,7 @@
     <article class="prose">
 <h1 id="introduction">Introduction</h1>
 <p>Fuzzloom is property-based testing and fuzzing for the <a href="https://fe-lang.org" rel="noopener">Fe</a> language, with differential testing between Fe&#39;s two backends.</p>
-<p>You write a <strong>property</strong> as an ordinary Fe function that returns <code>bool</code>. Fuzzloom generates thousands of inputs for it inside Fe and shrinks every failure to a small counterexample. It saves each failure so you can replay it after the fix. It also runs the same logic on <strong>sonatina (EVM)</strong> and <strong>native</strong>, and pins the first input on which they disagree.</p>
+<p>Write a <strong>property</strong> as a Fe function that returns <code>bool</code>. Fuzzloom generates inputs inside Fe, shrinks failures, and saves counterexamples for replay. It can also test ordered action traces against shared state and compare the same Fe logic on <strong>Sonatina (EVM)</strong> and <strong>native</strong>.</p>
 <div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">/// A withdrawal is allowed only up to the balance.
 pub fn prop_withdraw_never_overdraws(_ balance: u128, _ amount: u128) -&gt; bool {
     !can_withdraw(balance, amount) || amount &lt;= balance
@@ -80,20 +80,23 @@ FAIL  prop_withdraw_never_overdraws(u128, u128)  counterexample at input 19
 <li><strong>Inputs recovered from panics:</strong> Fe cannot catch an abort. Fuzzloom finds the aborting input by searching on the run count, then shrinks it by replay.</li>
 <li><strong>Effects:</strong> a property can declare <code>uses (ledger: mut Ledger)</code>. Fuzzloom builds each effect from your <code>fixture_*()</code> function, fresh for every input.</li>
 <li><strong>Input ranges:</strong> <code>/// fuzzloom: start in 1668464000..=1700000000</code> restricts one argument everywhere, shrinking included.</li>
-<li><strong>Backend comparison:</strong> <code>diff</code> compares 100,000 inputs on sonatina and native and pins the first difference in 8 <code>fe</code> runs.</li>
-<li><strong>A regression suite:</strong> every failure is a JSON record. <code>replay</code> re-checks them, and <code>fuzz</code> mutates them to find a fix that only handled one input.</li>
-<li><strong>CI output:</strong> exit codes, <code>--json</code> and JUnit XML. Infrastructure problems (compile errors, out of gas) are never reported as findings.</li>
+<li><strong>Backend comparison.</strong> <code>diff</code> compares 100,000 inputs per target by default and verifies a located mismatch by running the exact input on both backends.</li>
+<li><strong>Stateful sequences.</strong> <code>sequence</code> checks a <code>seq_*</code> invariant across actions that share one effect fixture. It shrinks failing traces and saves the ordered actions for replay.</li>
+<li><strong>Regression records.</strong> <code>replay</code> checks saved failures against current code. <code>fuzz</code> also mutates saved property and abort inputs to exercise nearby cases.</li>
+<li><strong>CI output.</strong> <code>--strict</code> catches skipped selected targets before a campaign starts. <code>--json</code> reports campaign counts and <code>--junit</code> writes test results.</li>
 </ul>
 <h2 id="what-it-does-not-do"><a class="anchor" href="#what-it-does-not-do" aria-hidden="true" tabindex="-1">#</a>What it does not do</h2>
 <ul>
 <li><strong>It does not prove a property.</strong> A passing campaign means 10,000 well-chosen inputs found nothing, and the report says what they exercised.</li>
-<li><strong>No sequences of calls yet.</strong> Each input gets fresh fixtures.</li>
+<li><strong>Bounded traces.</strong> Sequences have at most eight actions. A panic during a sequence is an infrastructure outcome.</li>
 <li><strong>Limited input types.</strong> Integers and <code>bool</code> only, 1 to 3 arguments per property.</li>
 </ul>
 <h2 id="where-to-go-next"><a class="anchor" href="#where-to-go-next" aria-hidden="true" tabindex="-1">#</a>Where to go next</h2>
 <ul>
 <li><a href="quickstart.html">Quick start</a>: install and run your first property in a few minutes.</li>
 <li><a href="writing-properties.html">Writing properties</a>: the conventions and what can be an argument.</li>
+<li><a href="stateful.html">Stateful sequences</a> walks through a receipt regression on both backends.</li>
+<li><a href="experiments.html">Compiler experiments</a> includes the exact shift oracle and the external Fe Keccak integration.</li>
 <li><a href="architecture.html">How it works</a> and <a href="algorithms.html">Algorithms and guarantees</a>, for the full picture.</li>
 </ul>
 

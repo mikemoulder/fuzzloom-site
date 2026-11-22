@@ -45,7 +45,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Guides</p>
-          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html" aria-current="page">The whole guide</a></li></ul>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="stateful.html">Stateful sequences</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html" aria-current="page">The whole guide</a></li></ul>
         </div>
         <div class="side__group">
           <p class="side__label">Reference</p>
@@ -75,6 +75,7 @@
 <li><a href="configuration.html">Configuration</a></li>
 <li><a href="troubleshooting.html">Troubleshooting</a></li>
 <li><a href="good-properties.html">Writing good properties</a></li>
+<li><a href="stateful.html">Stateful sequences</a></li>
 </ol>
 <h2 id="1-install-and-check"><a class="anchor" href="#1-install-and-check" aria-hidden="true" tabindex="-1">#</a>1. Install and check</h2>
 <p>Fuzzloom needs:</p>
@@ -176,7 +177,7 @@ pub struct FixedClock { pub at: u64 }
 impl Clock for FixedClock { fn now(self) -&gt; u64 { self.at } }
 
 pub fn fixture_clock() -&gt; FixedClock { FixedClock { at: 1700000000 } }</code></pre></div>
-<p><strong>Fresh state every time.</strong> Every evaluation builds every effect from its fixture again. Evaluations never see each other&#39;s changes, so a failure replays exactly, and shrinking compares like with like. A bug that only appears after a particular sequence of calls is therefore out of reach for now; see <a href="https://github.com/MikeMoulder/fuzzloom#what-fuzzloom-does-not-do" rel="noopener">what Fuzzloom does not do</a>.</p>
+<p><strong>Fresh state every time.</strong> A <code>prop_*</code> evaluation builds every effect from its fixture again. Evaluations never see each other&#39;s changes, so failure replay and shrink trials start from the same state. To check behavior across several calls that share a fixture, use <a href="stateful.html">stateful sequences</a>.</p>
 <p><strong>When a target is skipped.</strong> A target whose effect has no fixture, or several, is skipped with the reason:</p>
 <div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">  skip  prop_two   src/lib.fe:4  uses L, and more than one fixture builds it (fixture_a, fixture_b)
   skip  prop_none  src/lib.fe:5  uses Wallet, but the ingot has no `pub fn fixture_wallet() -&gt; Wallet` to build it</code></pre></div>
@@ -184,22 +185,7 @@ pub fn fixture_clock() -&gt; FixedClock { FixedClock { at: 1700000000 } }</code>
 <div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">  prop  prop_transfer_conserves_supply(amount: u128, to_bob: bool)  src/lib.fe:54
         uses mut Ledger &lt;- fixture_ledger(), FeePolicy &lt;- fixture_policy()</code></pre></div>
 <h3 id="stateful-sequences"><a class="anchor" href="#stateful-sequences" aria-hidden="true" tabindex="-1">#</a>Stateful sequences</h3>
-<p>In an Fe test, <code>find_sequence</code> generates sequences of one to eight steps. Each step carries up to three bounded input words, so the first can select a command and the remaining words can provide its arguments. Provide an evaluator that creates a fresh fixture and calls <code>run_steps</code> inside its <code>with</code> block. The step function performs the operation and returns the invariant result after the operation.</p>
-<div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">fn evaluate_receipts(_ steps: Sequence) -&gt; u64 {
-    var ledger = ReceiptLedger { seen: 0, balance: 0, model: 0 }
-    with (ReceiptLedger = ledger) { run_steps(steps, post_receipt) }
-}
-
-let result = find_sequence(
-    evaluate_receipts,
-    bounds: Bounds::full(3, 0, 0),
-    arity: 1,
-    max_steps: 8,
-    seed: 7,
-    runs: 20,
-    budget: 100,
-)</code></pre></div>
-<p>The <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/ingots/fuzzloom/src/sequence.fe" rel="noopener">receipt ledger regression</a> finds repeated crediting of the same receipt. The result contains the original sequence, its shrunk failure, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous deletions and per-word moves. Stateful campaigns are available through the Fe library. A panic from a step propagates through the test.</p>
+<p>Use <a href="stateful.html">stateful sequences</a> for invariants that depend on several calls sharing the same effect fixture.</p>
 <h2 id="6-restricting-input-ranges"><a class="anchor" href="#6-restricting-input-ranges" aria-hidden="true" tabindex="-1">#</a>6. Restricting input ranges</h2>
 <p>By default every argument ranges over its whole type. When a bug only exists in a narrow, meaningful region, declare it with a doc-comment line above the function:</p>
 <div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">/// Vesting never releases more than the grant.
@@ -232,7 +218,7 @@ DIVERGE diff_rounding_mode(u64) -&gt; u64  first at input 269, found in 3 search
 <p><strong>Choosing targets.</strong> Good candidates are arithmetic helpers, encoding and decoding, rounding, anything with <code>#[cfg(...)]</code> branches, and anything that leans on wrapping or widening casts. Logic that only makes sense inside a deployed contract, such as anything calling <code>Evm</code> effects, does not compile on the native backend and cannot be a differential target.</p>
 <p><strong>What a divergence means.</strong> The two backends computed different values for the same Fe code and the same input. Either the code depends on something backend-specific (<code>#[cfg(target)]</code>, or behaviour your code relies on but the language leaves open), or one backend has a bug. Either way, the input and both outputs are what you need to file it.</p>
 <h2 id="8-saved-failures-as-a-regression-suite"><a class="anchor" href="#8-saved-failures-as-a-regression-suite" aria-hidden="true" tabindex="-1">#</a>8. Saved failures as a regression suite</h2>
-<p>Every <code>FAIL</code>, <code>ABORT</code> and <code>DIVERGE</code> is saved to <code>.fuzzloom/failures/&lt;target&gt;-&lt;hash&gt;.json</code>. The record holds the shrunk input, the original input, the seed, the iteration, the backend and the fe version, plus a human-readable value per argument. <strong>Commit this directory.</strong> It is a regression suite that grows on its own.</p>
+<p>Every <code>FAIL</code>, <code>ABORT</code> and <code>DIVERGE</code> is saved to <code>.fuzzloom/failures/&lt;target&gt;-&lt;hash&gt;.json</code>. Single-input records store the shrunk and original inputs where available. Stateful records store the ordered shrunk trace for the backend that found it. Records also include the seed, iteration, backend and Fe version. Commit this directory to keep the findings as regression tests.</p>
 <div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx fuzzloom replay                 # re-check every saved failure</code></pre></div>
 <div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">FIXED  prop_withdraw_never_overdraws-2c81bbb3  now passes
 FAILS  prop_fee_matches_exact_math-0e05b819    still fails</code></pre></div>
@@ -242,6 +228,7 @@ FAILS  prop_fee_matches_exact_math-0e05b819    still fails</code></pre></div>
 <p><code>--no-corpus</code> turns mutation campaigns off for one run.</p>
 <h2 id="9-running-in-ci"><a class="anchor" href="#9-running-in-ci" aria-hidden="true" tabindex="-1">#</a>9. Running in CI</h2>
 <p>Exit codes make Fuzzloom a normal CI step: <code>1</code> fails the build on a finding, and <code>2</code> fails it on an infrastructure problem. Pin a seed for a deterministic check, or leave it random to explore further on every run. The seed is printed either way. <code>--junit</code> writes a report that test dashboards understand. Findings become <code>&lt;failure&gt;</code> and infrastructure problems become <code>&lt;error&gt;</code>, so a dashboard never shows out-of-gas as a broken property.</p>
+<p>Starting in CLI version 0.1.3, add <code>--strict</code> to <code>fuzz</code>, <code>diff</code>, or <code>sequence</code> to turn skipped candidates in the selected command and <code>--only</code> scope into JUnit errors and exit 2 before any campaigns run. Campaign JSON includes selected, runnable, skipped, run and completed target counts. For fuzz and sequence, the input count stops at each reported first finding or the end of the successful campaign. For diff, it counts the input pairs in completed campaigns. It excludes auxiliary search rounds, mutation trials outside the reported outcome, and infrastructure outcomes.</p>
 <p>GitHub Actions, on Linux so the native backend is available:</p>
 <div class="code"><span class="code__lang">yaml</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-yaml">- uses: actions/setup-node@v4
   with: { node-version: "22" }
@@ -249,10 +236,11 @@ FAILS  prop_fee_matches_exact_math-0e05b819    still fails</code></pre></div>
   run: |
     curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.6.0
     echo "$HOME/.fe/bin" &gt;&gt; "$GITHUB_PATH"
-- run: npx -y fuzzloom doctor
-- run: npx -y fuzzloom replay --junit reports/replay.xml     # saved failures stay fixed
-- run: npx -y fuzzloom fuzz --junit reports/fuzz.xml          # new inputs every run
-- run: npx -y fuzzloom diff --junit reports/diff.xml          # sonatina against native</code></pre></div>
+- run: npx -y fuzzloom@0.1.3 doctor
+- run: npx -y fuzzloom@0.1.3 replay --junit reports/replay.xml
+- run: npx -y fuzzloom@0.1.3 fuzz --strict --junit reports/fuzz.xml
+- run: npx -y fuzzloom@0.1.3 diff --strict --junit reports/diff.xml</code></pre></div>
+<p>If your ingot declares <code>seq_*</code> targets, add <code>npx -y fuzzloom@0.1.3 sequence --strict --seed 7 --junit reports/sequence.xml</code>. Add <code>--backend native</code> in a separate job to run the same trace stream on the native backend. An empty selection exits 2, so include only the campaign commands that have targets in your ingot.</p>
 <p>Fuzzloom&#39;s own pipeline, <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/scripts/ci.sh" rel="noopener"><code>scripts/ci.sh</code></a>, is a complete working example. It runs on CircleCI.</p>
 <h2 id="10-configuration"><a class="anchor" href="#10-configuration" aria-hidden="true" tabindex="-1">#</a>10. Configuration</h2>
 <p>Everything is a command-line option or an environment variable. There is no config file.</p>
@@ -300,7 +288,7 @@ FAILS  prop_fee_matches_exact_math-0e05b819    still fails</code></pre></div>
 <p><strong><code>INFRA ... out-of-gas</code>.</strong> <code>fe test</code> caps each EVM test at 10^9 gas. Lower <code>--runs</code>, simplify the property, or run with <code>--backend native</code>, which has no gas.</p>
 <p><strong><code>INFRA ... compile</code>.</strong> The generated harness did not compile. The first diagnostic is shown, and the generated ingot is kept in <code>.fuzzloom/tmp/</code> with its path printed. Usually the property&#39;s ingot itself fails <code>fe check</code>, or an effect type is not reachable. Run <code>npx fuzzloom doctor</code> and <code>fe check</code> on your ingot first.</p>
 <p><strong><code>Native backend: fe not runnable in WSL</code>.</strong> Install fe inside your WSL distro (<code>feup</code> works there too), or point <code>FE_WSL_DISTRO</code> and <code>FE_WSL_BIN</code> at it. Only <code>diff</code> and <code>--backend native</code> need it.</p>
-<p><strong>A property you wrote is missing from <code>list</code>.</strong> It is either not <code>pub</code>, not named <code>prop_</code>/<code>diff_</code>, or skipped. Skipped functions are listed with the reason.</p>
+<p><strong>A target you wrote is missing from <code>list</code>.</strong> Check that it is public and starts with <code>prop_</code>, <code>diff_</code> or <code>seq_</code>. The skipped section shows unsupported signatures and fixtures with their reasons.</p>
 <p><strong><code>fe fmt --check</code> complains about <code>.fuzzloom/tmp</code>.</strong> Generated harnesses are removed at the end of every command, and kept only after an infrastructure error. Delete the directory, or fix the infrastructure error and rerun.</p>
 <h2 id="12-writing-good-properties"><a class="anchor" href="#12-writing-good-properties" aria-hidden="true" tabindex="-1">#</a>12. Writing good properties</h2>
 <ul>
@@ -312,6 +300,40 @@ FAILS  prop_fee_matches_exact_math-0e05b819    still fails</code></pre></div>
 <li><strong>Guard preconditions by returning <code>true</code>.</strong> If an input is outside the function&#39;s contract, <code>if amount &gt; balance { return true }</code> keeps it from being reported. Prefer an <a href="ranges.html">input range</a> when the region is contiguous, so no runs are wasted.</li>
 <li><strong>Let aborts be findings.</strong> A property does not need to catch overflow. An abort is reported with its input recovered, which is usually exactly the bug.</li>
 </ul>
+<h2 id="13-stateful-sequences"><a class="anchor" href="#13-stateful-sequences" aria-hidden="true" tabindex="-1">#</a>13. Stateful sequences</h2>
+<p>Use <code>fuzzloom sequence</code> in CLI 0.1.3 to check an invariant across several operations on shared state. A public <code>seq_*</code> function performs one operation and returns <code>bool</code> after checking the invariant. Its one to three scalar arguments and effect fixtures follow the same rules as <a href="effects.html">properties with effects</a>. All steps in one trace share the fixtures. Every new trace, replay and shrink attempt builds them again.</p>
+<h3 id="reproduce-a-receipt-regression"><a class="anchor" href="#reproduce-a-receipt-regression" aria-hidden="true" tabindex="-1">#</a>Reproduce a receipt regression</h3>
+<p>The <a href="https://github.com/MikeMoulder/fuzzloom/tree/main/examples/receipt-ledger" rel="noopener">receipt-ledger example</a> has a planted duplicate-credit bug. From a Fuzzloom checkout on Fe 26.6.0, start with one action per trace:</p>
+<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx -y fuzzloom@0.1.3 sequence examples/receipt-ledger \
+  --strict --seed 7 --runs 32 --steps 1</code></pre></div>
+<p>All 32 traces pass. Remove <code>--steps 1</code> to allow up to eight actions and exercise duplicate receipt posting:</p>
+<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx -y fuzzloom@0.1.3 sequence examples/receipt-ledger \
+  --strict --seed 7 --runs 32</code></pre></div>
+<div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">FAIL seq_credit_once, trace 2: 4 to 2 steps
+step 1: id = 0
+step 2: id = 0</code></pre></div>
+<p>The failing campaign exits 1 and saves the two receipt posts in order. Add <code>--backend native</code> to generate and save the same failing trace for native. Each backend has its own failure record. Run <code>replay</code> to check the records against the current code:</p>
+<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx -y fuzzloom@0.1.3 replay examples/receipt-ledger --only seq_credit_once</code></pre></div>
+<p>To check the whole lifecycle in a temporary copy, run <code>node scripts/check-sequence-workflow.mjs</code> from the checkout. It verifies the failure on both backends, applies a guard against duplicate credit, checks <code>FIXED</code>, then restores the original code and checks <code>REGRESSED</code>.</p>
+<h3 id="interpret-the-result"><a class="anchor" href="#interpret-the-result" aria-hidden="true" tabindex="-1">#</a>Interpret the result</h3>
+<p>The default maximum is eight actions. Set <code>--steps</code> to a value from 1 to 8 and <code>--runs</code> to control the trace budget per target. A failed invariant produces a replayable trace. A panic during a sequence is reported as infrastructure. Replay uses the recorded actions and backend, so it can check the counterexample after the seed or generator changes.</p>
+<h3 id="use-sequences-inside-a-fe-test"><a class="anchor" href="#use-sequences-inside-a-fe-test" aria-hidden="true" tabindex="-1">#</a>Use sequences inside a Fe test</h3>
+<p><code>find_sequence</code> generates bounded traces with up to three input words per step. A word can select an operation while the other words supply arguments. Provide an evaluator that creates a fresh fixture and calls <code>run_steps</code> under a <code>with</code> block.</p>
+<div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">fn evaluate_receipts(_ steps: Sequence) -&gt; u64 {
+    var ledger = ReceiptLedger { seen: 0, balance: 0, model: 0 }
+    with (ReceiptLedger = ledger) { run_steps(steps, post_receipt) }
+}
+
+let result = find_sequence(
+    evaluate_receipts,
+    bounds: Bounds::full(3, 0, 0),
+    arity: 1,
+    max_steps: 8,
+    seed: 7,
+    runs: 20,
+    budget: 100,
+)</code></pre></div>
+<p>The Fe report contains the original sequence, the shrunk failing trace, and the 1-based failing step. Completed shrinking leaves no failing candidate among the tested contiguous power-of-two deletions or the floor and halfway moves on individual words and equal words in the same argument position. A panic from a step propagates through the Fe test.</p>
 
     </article>
     <nav class="doc__pager" aria-label="Previous and next page">
@@ -321,7 +343,7 @@ FAILS  prop_fee_matches_exact_math-0e05b819    still fails</code></pre></div>
     <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/guide.md">Edit this page on GitHub</a></p>
   </main>
   <aside class="toc" aria-label="On this page">
-    <p class="side__label">On this page</p><ul><li><a href="#1-install-and-check">1. Install and check</a></li><li><a href="#2-your-first-property">2. Your first property</a></li><li><a href="#3-reading-the-results">3. Reading the results</a></li><li><a href="#4-seeds-and-reproducibility">4. Seeds and reproducibility</a></li><li><a href="#5-properties-with-effects">5. Properties with effects</a></li><li><a href="#6-restricting-input-ranges">6. Restricting input ranges</a></li><li><a href="#7-differential-targets">7. Differential targets</a></li><li><a href="#8-saved-failures-as-a-regression-suite">8. Saved failures as a regression suite</a></li><li><a href="#9-running-in-ci">9. Running in CI</a></li><li><a href="#10-configuration">10. Configuration</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li><li><a href="#12-writing-good-properties">12. Writing good properties</a></li></ul>
+    <p class="side__label">On this page</p><ul><li><a href="#1-install-and-check">1. Install and check</a></li><li><a href="#2-your-first-property">2. Your first property</a></li><li><a href="#3-reading-the-results">3. Reading the results</a></li><li><a href="#4-seeds-and-reproducibility">4. Seeds and reproducibility</a></li><li><a href="#5-properties-with-effects">5. Properties with effects</a></li><li><a href="#6-restricting-input-ranges">6. Restricting input ranges</a></li><li><a href="#7-differential-targets">7. Differential targets</a></li><li><a href="#8-saved-failures-as-a-regression-suite">8. Saved failures as a regression suite</a></li><li><a href="#9-running-in-ci">9. Running in CI</a></li><li><a href="#10-configuration">10. Configuration</a></li><li><a href="#11-troubleshooting">11. Troubleshooting</a></li><li><a href="#12-writing-good-properties">12. Writing good properties</a></li><li><a href="#13-stateful-sequences">13. Stateful sequences</a></li></ul>
   </aside>
 </div>
 <footer class="docs__footer">

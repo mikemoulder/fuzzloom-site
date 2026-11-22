@@ -45,7 +45,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Guides</p>
-          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="stateful.html">Stateful sequences</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
         </div>
         <div class="side__group">
           <p class="side__label">Reference</p>
@@ -64,7 +64,7 @@
 <p><strong><code>INFRA ... out-of-gas</code>.</strong> <code>fe test</code> caps each EVM test at 10^9 gas. Lower <code>--runs</code>, simplify the property, or run with <code>--backend native</code>, which has no gas.</p>
 <p><strong><code>INFRA ... compile</code>.</strong> The generated harness did not compile. The first diagnostic is shown, and the generated ingot is kept in <code>.fuzzloom/tmp/</code> with its path printed. Usually the property&#39;s ingot itself fails <code>fe check</code>, or an effect type is not reachable. Run <code>npx fuzzloom doctor</code> and <code>fe check</code> on your ingot first.</p>
 <p><strong><code>Native backend: fe not runnable in WSL</code>.</strong> Install fe inside your WSL distro (<code>feup</code> works there too), or point <code>FE_WSL_DISTRO</code> and <code>FE_WSL_BIN</code> at it. Only <code>diff</code> and <code>--backend native</code> need it.</p>
-<p><strong>A property you wrote is missing from <code>list</code>.</strong> It is either not <code>pub</code>, not named <code>prop_</code>/<code>diff_</code>, or skipped. Skipped functions are listed with the reason.</p>
+<p><strong>A target you wrote is missing from <code>list</code>.</strong> Check that it is public and starts with <code>prop_</code>, <code>diff_</code> or <code>seq_</code>. The skipped section shows unsupported signatures and fixtures with their reasons.</p>
 <p><strong><code>fe fmt --check</code> complains about <code>.fuzzloom/tmp</code>.</strong> Generated harnesses are removed at the end of every command, and kept only after an infrastructure error. Delete the directory, or fix the infrastructure error and rerun.</p>
 
     </article>

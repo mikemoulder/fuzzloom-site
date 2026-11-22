@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Backend parity and sampling experiments: Fuzzloom docs</title>
-<meta name="description" content="node scripts/check-integer-semantics.mjs generates and compares Fe functions that call the compiler's actual integer operators. Seed 7 exercised 100,000 bo">
+<meta name="description" content="Run node scripts/check-shift-oracle.mjs with Fe 26.6.0 (5b3f96a). The BigInt model computes left shift with multiplication and truncation, and arithmetic r">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Backend parity and sampling experiments: Fuzzloom docs">
 <meta property="og:image" content="../share.jpg">
@@ -45,7 +45,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Guides</p>
-          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="stateful.html">Stateful sequences</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
         </div>
         <div class="side__group">
           <p class="side__label">Reference</p>
@@ -61,6 +61,52 @@
     <p class="doc__crumbs"><a href="index.html">Docs</a> / Concepts</p>
     <article class="prose">
 <h1 id="backend-parity-and-sampling-experiments">Backend parity and sampling experiments</h1>
+<h2 id="exact-8-bit-shift-oracle"><a class="anchor" href="#exact-8-bit-shift-oracle" aria-hidden="true" tabindex="-1">#</a>Exact 8-bit shift oracle</h2>
+<p>Run <code>node scripts/check-shift-oracle.mjs</code> with Fe 26.6.0 (<code>5b3f96a</code>). The BigInt model computes left shift with multiplication and truncation, and arithmetic right shift with division rounded toward negative infinity. It generates exact expected bytes, then Fe compares every computed byte directly. Unsigned cases cover all 256 input bytes and all 256 shift counts. Signed cases cover all 256 input bytes and the 128 nonnegative counts representable by <code>i8</code>. Both operators are exercised on both backends.</p>
+<div class="table"><table>
+<thead>
+<tr>
+<th>Operation</th>
+<th align="right">Exact comparisons per backend</th>
+<th>Sonatina</th>
+<th>Native</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>u8 &lt;&lt;</code></td>
+<td align="right">65,536</td>
+<td>Matched</td>
+<td>Matched</td>
+</tr>
+<tr>
+<td><code>u8 &gt;&gt;</code></td>
+<td align="right">65,536</td>
+<td>Matched</td>
+<td>Matched</td>
+</tr>
+<tr>
+<td><code>i8 &lt;&lt;</code></td>
+<td align="right">32,768</td>
+<td>Matched</td>
+<td>Matched</td>
+</tr>
+<tr>
+<td><code>i8 &gt;&gt;</code></td>
+<td align="right">32,768</td>
+<td>Matched</td>
+<td>Matched</td>
+</tr>
+<tr>
+<td>Corrupted expected byte at input 0, count 0</td>
+<td align="right">1</td>
+<td>Detected</td>
+<td>Detected</td>
+</tr>
+</tbody></table>
+</div>
+<p>The Fe harness still evaluates counts above the bit width. The expected table reuses row 8 because the reference saturates there. The negative control verifies that a disagreement reports the concrete input, expected byte, and observed byte.</p>
+<h2 id="published-cli-against-another-fe-project"><a class="anchor" href="#published-cli-against-another-fe-project" aria-hidden="true" tabindex="-1">#</a>Published CLI against another Fe project</h2>
+<p><code>bash scripts/check-external-ingot.sh /path/to/fuzzloom</code> creates a temporary consumer for the pinned <a href="https://github.com/fe-lang/keccak/tree/345d5088de986fe54b23a6aaa3a33e1c349d0960" rel="noopener">Fe Keccak ingot</a>. The public npm 0.1.2 package discovered both targets. On Fe 26.6.0, each backend passed 32 streaming checks against the Ethereum Keccak-256 digest of <code>abc</code>, and 128 single-byte hash inputs agreed across the backends. The Fuzzloom pipeline includes this check. The upstream library remains an external dependency of this test.</p>
 <h2 id="fe-integer-semantics-on-fe-2660"><a class="anchor" href="#fe-integer-semantics-on-fe-2660" aria-hidden="true" tabindex="-1">#</a>Fe integer semantics on Fe 26.6.0</h2>
 <p><code>node scripts/check-integer-semantics.mjs</code> generates and compares Fe functions that call the compiler&#39;s actual integer operators. Seed 7 exercised 100,000 boundary-biased inputs per operation and type. All <strong>116 keyed checkpoint campaigns</strong> agreed across Sonatina and native, for <strong>11.6 million input pairs</strong>, and all <strong>762 explicit edge evaluations</strong> agreed. Backend agreement covers the sampled inputs and the reported outcomes.</p>
 <div class="table"><table>
@@ -227,7 +273,7 @@
     <p class="doc__edit"><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/docs/experiments.md">Edit this page on GitHub</a></p>
   </main>
   <aside class="toc" aria-label="On this page">
-    <p class="side__label">On this page</p><ul><li><a href="#fe-integer-semantics-on-fe-2660">Fe integer semantics on Fe 26.6.0</a></li><li><a href="#paired-uniform-sampling-baseline">Paired uniform sampling baseline</a></li></ul>
+    <p class="side__label">On this page</p><ul><li><a href="#exact-8-bit-shift-oracle">Exact 8-bit shift oracle</a></li><li><a href="#published-cli-against-another-fe-project">Published CLI against another Fe project</a></li><li><a href="#fe-integer-semantics-on-fe-2660">Fe integer semantics on Fe 26.6.0</a></li><li><a href="#paired-uniform-sampling-baseline">Paired uniform sampling baseline</a></li></ul>
   </aside>
 </div>
 <footer class="docs__footer">

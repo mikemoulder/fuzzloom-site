@@ -1,8 +1,8 @@
 # Fuzzloom
 
-> Property-based testing and fuzzing for the Fe language, with EVM (sonatina) and native differential testing. Write a property as a Fe function returning bool; Fuzzloom generates inputs inside Fe, shrinks failures, saves them for replay and compares backends. Install: npx fuzzloom. Requires fe 26.6 and Node 22.18.
+> Property-based testing for Fe. Fuzzloom generates inputs and stateful traces inside Fe, shrinks failures, saves them for replay, and compares Sonatina EVM with native. Run with `npx fuzzloom` on Fe 26.6 and Node 22.18 or newer.
 
-Key facts: properties are `pub fn prop_<name>(args) -> bool`, differential targets `pub fn diff_<name>(args) -> T`; arguments are 1 to 3 of u8..u256, i8..i256 or bool; effects come from `pub fn fixture_*() -> T`; ranges from `/// fuzzloom: <arg> in <lo>..=<hi>`. Exit codes: 0 passed, 1 finding, 2 infrastructure error. Fuzzing does not prove a property holds.
+Targets use `prop_` for properties, `diff_` for differential tests, and `seq_` for stateful steps. Each takes one to three integer or bool arguments. Use `fixture_*` functions for effects and `/// fuzzloom: <arg> in <lo>..=<hi>` for bounds. CLI 0.1.3 adds `sequence` and `--strict`. Strict mode exits 2 before running if a selected target is skipped. Exit codes are 0 for a pass, 1 for a finding, and 2 for an infrastructure or selection error.
 
 
 ## Getting started
@@ -16,9 +16,10 @@ Key facts: properties are `pub fn prop_<name>(args) -> bool`, differential targe
 - [Writing properties](https://fuzzloom.pages.dev/docs/writing-properties.html): /// The fee matches exact arithmetic for every amount. pub fn prop_fee_matches_exact_math(_ amount: u64) -> bool { let exact: u128 = (amount as u128) 30 / 
 - [Reading the results](https://fuzzloom.pages.dev/docs/results.html): A shrink that ran out of budget says (budget reached, may not be minimal). The input shown still fails; it may just not be the smallest.
 - [Effects and fixtures](https://fuzzloom.pages.dev/docs/effects.html): pub fn fixture_ledger() -> Ledger { Ledger { alice: 1000000, bob: 0, fees: 0 } }
+- [Stateful sequences](https://fuzzloom.pages.dev/docs/stateful.html): Use fuzzloom sequence in CLI 0.1.3 to check an invariant across several operations on shared state. A public seq_ function performs one operation and retur
 - [Input ranges](https://fuzzloom.pages.dev/docs/ranges.html): In examples/token-ledger, this annotation turns a vesting overflow that 10,000 uniform inputs never reach into a failure at the first input.
 - [Differential testing](https://fuzzloom.pages.dev/docs/differential.html): Targets may use effects and declared ranges exactly as properties do. diff needs the native backend; doctor tells you whether it is available.
-- [Saved failures](https://fuzzloom.pages.dev/docs/saved-failures.html): Every FAIL, ABORT and DIVERGE is saved to .fuzzloom/failures/<target>-<hash>.json. The record holds the shrunk input, the original input, the seed, the ite
+- [Saved failures](https://fuzzloom.pages.dev/docs/saved-failures.html): Every FAIL, ABORT and DIVERGE is saved to .fuzzloom/failures/<target>-<hash>.json. Single-input records store the shrunk and original inputs where availabl
 - [Running in CI](https://fuzzloom.pages.dev/docs/ci.html): Exit codes make Fuzzloom a normal CI step: 1 fails the build on a finding, and 2 fails it on an infrastructure problem. Pin a seed for a deterministic chec
 - [Writing good properties](https://fuzzloom.pages.dev/docs/good-properties.html): 
 - [The whole guide](https://fuzzloom.pages.dev/docs/guide.html): From a first property to a regression suite in CI. For how Fuzzloom works inside, see architecture.md; for exact guarantees, see algorithms.md.
@@ -33,7 +34,7 @@ Key facts: properties are `pub fn prop_<name>(args) -> bool`, differential targe
 
 - [How it works](https://fuzzloom.pages.dev/docs/architecture.html): Fuzzloom has two halves with a strict split.
 - [Algorithms and guarantees](https://fuzzloom.pages.dev/docs/algorithms.html): Every non-trivial algorithm in Fuzzloom states what it guarantees and where it stops, and has a test that fails if the guarantee breaks. This page collects
-- [Backend parity and sampling experiments](https://fuzzloom.pages.dev/docs/experiments.html): node scripts/check-integer-semantics.mjs generates and compares Fe functions that call the compiler's actual integer operators. Seed 7 exercised 100,000 bo
+- [Backend parity and sampling experiments](https://fuzzloom.pages.dev/docs/experiments.html): Run node scripts/check-shift-oracle.mjs with Fe 26.6.0 (5b3f96a). The BigInt model computes left shift with multiplication and truncation, and arithmetic r
 
 ## Source
 

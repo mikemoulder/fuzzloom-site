@@ -7,7 +7,7 @@
 <meta name="description" content="Fuzzloom tries 10,000 inputs on every Fe property, shrinks each failure to a small counterexample and checks that the EVM and native backends agree.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Fuzzloom: property-based testing and fuzzing for Fe">
-<meta property="og:description" content="Generated inputs, shrunk counterexamples, saved failures and EVM/native differential testing for the Fe language.">
+<meta property="og:description" content="Generated inputs, shrunk counterexamples, stateful trace replay and EVM/native differential testing for Fe.">
 <meta property="og:image" content="share.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -132,10 +132,10 @@
       <div class="hero__c">
         <a class="pill" href="https://github.com/MikeMoulder/fuzzloom/blob/main/CHANGELOG.md"><span data-cli-version>CLI releases</span><span class="muted">Read the changelog</span></a>
         <h1 id="hero-h">Property-based testing for Fe</h1>
-        <p class="hero__lead">Write a property as a Fe function. Fuzzloom tries 10,000 inputs on it inside Fe, shrinks every failure and checks that the EVM and native backends agree.</p>
-        <div class="btn-row"><a class="btn btn--primary" href="docs/quickstart.html">Read the quick start<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="https://github.com/MikeMoulder/fuzzloom">View the source</a></div>
+        <p class="hero__lead">Test Fe properties and stateful sequences. Fuzzloom shrinks failures into replayable counterexamples and compares Sonatina EVM with native.</p>
+        <div class="btn-row"><a class="btn btn--primary" href="docs/quickstart.html">Read the quick start<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="docs/stateful.html">Try a stateful regression</a></div>
       </div>
-      <div class="hero__window" data-fx="gradient-mesh" data-fx-seed="11" role="img" aria-label="A terminal running npx fuzzloom fuzz on the token-ledger example: four properties, 10,000 inputs each, all passed in 6.1 seconds" data-ui-pause-host>
+      <div class="hero__window" data-fx="gradient-mesh" data-fx-seed="11" role="img" aria-label="A terminal running the seed-7 token-ledger campaign. Two properties pass and two abort. Fuzzloom saves both failures." data-ui-pause-host>
         <div class="ly-piece" aria-hidden="true" data-ui-loop>
           <div class="ui ui-panel ui-term" data-ui="terminal-run">
             <div class="ui-term__head">
@@ -322,16 +322,16 @@
       <div class="grid">
         <div class="span-5 stack-6">
           <h2 id="figures-h">Results on the examples</h2>
-          <p class="t-lead">CI checks the seed-7 results for vault-math, token-ledger and amm-swap.</p>
+          <p class="t-lead">CI checks the seed-7 examples, replays the receipt regression on both backends, and runs the independent shift oracle.</p>
           <div class="stats" data-moment="counter-rolls">
             <div class="stat"><p class="t-stat">9</p><p class="t-small muted">failing properties across three examples</p></div>
             <div class="stat"><p class="t-stat">8</p><p class="t-small muted">fe runs to pin a backend divergence</p></div>
             <div class="stat"><p class="t-stat">100</p><p class="t-small muted">Fe tests on both backends</p></div>
-            <div class="stat"><p class="t-stat">56 kB</p><p class="t-small muted">npm package, no dependencies</p></div>
+            <div class="stat"><p class="t-stat">196,608</p><p class="t-small muted">exact shift comparisons per backend</p></div>
           </div>
-          <a class="link" href="https://github.com/MikeMoulder/fuzzloom/tree/main/examples">See the examples</a>
+          <a class="link" href="docs/experiments.html">Read the compiler experiments</a>
         </div>
-        <div class="frame frame--lit span-6 start-7" role="img" aria-label="The CI checks include Fe tests on both backends, CLI tests, package installation and seed-7 runs on three examples" data-ui-pause-host>
+        <div class="frame frame--lit span-6 start-7" role="img" aria-label="CI checks Fe and CLI tests, package installation, seed-7 examples, stateful replay, and the shift oracle." data-ui-pause-host>
           <div class="stage"><div class="at-rise fit" style="--fit-max:560px;--ax:max(24px, 50% - 280px);--ay:40px;--ay-sm:24px" aria-hidden="true" data-ui-loop>
             <div class="ui ui-panel ui-term" data-ui="terminal-run">
               <div class="ui-term__head">
@@ -347,10 +347,10 @@
                   <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>6 of 6 steps</span></div>
                   <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">Format check</span><span class="ui-term__n">clean</span></div>
                   <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">Fe tests, both backends</span><span class="ui-term__n">100 x 2</span></div>
-                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">CLI tests</span><span class="ui-term__n">85 test cases</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">CLI tests</span><span class="ui-term__n">86 test cases</span></div>
                   <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">Package install test</span><span class="ui-term__n">doctor ok</span></div>
-                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">vault-math, fuzz and diff</span><span class="ui-term__n">seed 7</span></div>
-                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">token-ledger and amm-swap</span><span class="ui-term__n">seed 7</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">Fuzz, diff and sequence examples</span><span class="ui-term__n">seed 7</span></div>
+                  <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">Exact shift oracle</span><span class="ui-term__n">both backends</span></div>
                   <div class="ui-term__ln ui-term__gap" data-term-out aria-hidden="true"></div>
                   <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>CI passed</b></div>
                   <div class="ui-term__ln ui-term__cmd" data-term-next><span class="ui-term__cwd">~/fuzzloom</span><span class="ui-term__sig">$</span><span class="ui-term__typed"></span><i class="ui-term__caret" aria-hidden="true"></i></div>
@@ -376,6 +376,7 @@
           <div class="faq__item"><h3>Does it need fe 26.6?</h3><p>Yes. npx fuzzloom doctor checks the version and that the library compiles with it.</p></div>
           <div class="faq__item"><h3>Does the fuzzing run on Windows?</h3><p>Yes. Native tests run inside WSL.</p></div>
           <div class="faq__item"><h3>Can a property use effects?</h3><p>Yes, through one fixture_ function per effect, built fresh for every input.</p></div>
+          <div class="faq__item"><h3>Can I test several calls on the same state?</h3><p>Yes. Each trace shares its Fe effect fixtures across actions. The shrinker and replay start each trial from fresh fixtures. <a href="docs/stateful.html">Follow the receipt walkthrough</a>.</p></div>
           <div class="faq__item"><h3>Where do saved failures go?</h3><p>To .fuzzloom/failures, one JSON record each. Commit them: replay re-checks them all.</p></div>
           <div class="faq__item"><h3>What is the price?</h3><p>Nothing. It is open source under the Apache License 2.0.</p></div>
         </div>
@@ -416,7 +417,7 @@
           <p class="footer__lede">Property-based testing and fuzzing for Fe.</p>
         </div>
         <div class="span-2 footer__col"><h3>Product</h3><ul><li><a href="#failures">Failures</a></li><li><a href="#campaign">Campaigns</a></li><li><a href="#backends">Backends</a></li></ul></div>
-        <div class="span-2 footer__col"><h3>Docs</h3><ul><li><a href="docs/quickstart.html">Quick start</a></li><li><a href="docs/guide.html">Guide</a></li><li><a href="docs/cli.html">CLI reference</a></li><li><a href="docs/algorithms.html">Algorithms</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>Docs</h3><ul><li><a href="docs/quickstart.html">Quick start</a></li><li><a href="docs/guide.html">Guide</a></li><li><a href="docs/stateful.html">Stateful sequences</a></li><li><a href="docs/cli.html">CLI reference</a></li><li><a href="docs/algorithms.html">Algorithms</a></li></ul></div>
         <div class="span-2 footer__col"><h3>Project</h3><ul><li><a href="https://github.com/MikeMoulder/fuzzloom">GitHub</a></li><li><a href="https://www.npmjs.com/package/fuzzloom">npm</a></li><li><a href="https://github.com/MikeMoulder/fuzzloom/blob/main/CHANGELOG.md">Changelog</a></li></ul></div>
         <div class="span-2 footer__col"><h3>For agents</h3><ul><li><a href="llms.txt">llms.txt</a></li><li><a href="llms-full.txt">llms-full.txt</a></li></ul></div>
       </div>

@@ -45,7 +45,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Guides</p>
-          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="stateful.html">Stateful sequences</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
         </div>
         <div class="side__group">
           <p class="side__label">Reference</p>
@@ -69,14 +69,13 @@ node --version</code></pre></div>
 <p><code>diff</code> and <code>--backend native</code> also need fe&#39;s native backend, which runs on Linux and macOS. On Windows, install fe inside WSL as well; Fuzzloom then runs native tests there by itself.</p>
 <h2 id="2-check-your-setup"><a class="anchor" href="#2-check-your-setup" aria-hidden="true" tabindex="-1">#</a>2. Check your setup</h2>
 <p>Run this from inside any Fe ingot (a directory with <code>fe.toml</code> and <code>src/</code>):</p>
-<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx fuzzloom doctor</code></pre></div>
+<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx -y fuzzloom@0.1.3 doctor</code></pre></div>
 <div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">ok    Node              v22.18.0
 ok    fe                fe 26.6.0 (5b3f96a) at /home/you/.fe/bin/fe
 ok    Fe library        .../node_modules/fuzzloom/ingot
 ok    Library compiles  fe check passed
 ok    Native backend    fe 26.6.0 (5b3f96a) in this machine
-warn  Project           ingot my_ingot: 0 prop_* and 0 diff_* functions, 0 skipped
-                        write `pub fn prop_&lt;name&gt;(args) -&gt; bool` (or diff_&lt;name&gt;) in the ingot's src/</code></pre></div>
+warn  Project           ingot my_ingot: 0 prop_*, 0 diff_*, 0 seq_* functions, 0 skipped</code></pre></div>
 <p>The project warning goes away once you write your first property.</p>
 <h2 id="3-write-a-property"><a class="anchor" href="#3-write-a-property" aria-hidden="true" tabindex="-1">#</a>3. Write a property</h2>
 <p>Add a public function whose name starts with <code>prop_</code> and which returns <code>bool</code>, anywhere under <code>src/</code>:</p>
@@ -90,24 +89,26 @@ pub fn prop_fee_matches_exact_math(_ amount: u64) -&gt; bool {
     (fee(amount) as u128) == exact
 }</code></pre></div>
 <h2 id="4-fuzz-it"><a class="anchor" href="#4-fuzz-it" aria-hidden="true" tabindex="-1">#</a>4. Fuzz it</h2>
-<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx fuzzloom fuzz --seed 7</code></pre></div>
+<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx -y fuzzloom@0.1.3 fuzz --strict --seed 7</code></pre></div>
 <div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">FAIL  prop_fee_matches_exact_math(u64)  counterexample at input 2
       amount = 614891469123651721
       shrunk from 4762291152399575021 in 1414 evaluations
       reproduce: fuzzloom reproduce prop_fee_matches_exact_math-0e05b819</code></pre></div>
 <p><code>614891469123651721</code> is <code>u64::MAX / 30 + 1</code>, the smallest amount for which <code>amount * 30</code> wraps. The shrinker found the exact threshold. The seed makes the run repeatable; leave it out and Fuzzloom picks one at random and prints it.</p>
+<p><code>--strict</code> exits 2 before running if Fuzzloom skips a selected target. Use <code>npx -y fuzzloom@0.1.3 list</code> to see each target and any skip reasons.</p>
 <h2 id="5-fix-it-and-replay"><a class="anchor" href="#5-fix-it-and-replay" aria-hidden="true" tabindex="-1">#</a>5. Fix it and replay</h2>
 <p>Widen before multiplying, then check the saved failure again:</p>
 <div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">pub fn fee(_ amount: u64) -&gt; u64 {
     ((amount as u128) * 30 / 10000).downcast_truncate()
 }</code></pre></div>
-<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx fuzzloom replay</code></pre></div>
+<div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx -y fuzzloom@0.1.3 replay</code></pre></div>
 <div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">FIXED  prop_fee_matches_exact_math-0e05b819  now passes</code></pre></div>
 <p>Commit <code>.fuzzloom/failures/</code>: it is your regression suite. Every later <code>fuzz</code> also mutates those saved inputs, to catch a fix that only handles the one input that was saved.</p>
 <h2 id="next"><a class="anchor" href="#next" aria-hidden="true" tabindex="-1">#</a>Next</h2>
 <ul>
 <li><a href="writing-properties.html">Writing properties</a>: types, labels and what gets skipped.</li>
 <li><a href="effects.html">Effects and fixtures</a>: properties that use state or context.</li>
+<li><a href="stateful.html">Stateful sequences</a> tests repeated operations on a shared fixture and replays the saved trace.</li>
 <li><a href="differential.html">Differential testing</a>: compare sonatina and native.</li>
 <li><a href="ci.html">Running in CI</a>: exit codes and JUnit reports.</li>
 </ul>

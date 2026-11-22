@@ -45,7 +45,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Guides</p>
-          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html" aria-current="page">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="stateful.html">Stateful sequences</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html" aria-current="page">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
         </div>
         <div class="side__group">
           <p class="side__label">Reference</p>
@@ -62,6 +62,7 @@
     <article class="prose">
 <h1 id="running-in-ci">Running in CI</h1>
 <p>Exit codes make Fuzzloom a normal CI step: <code>1</code> fails the build on a finding, and <code>2</code> fails it on an infrastructure problem. Pin a seed for a deterministic check, or leave it random to explore further on every run. The seed is printed either way. <code>--junit</code> writes a report that test dashboards understand. Findings become <code>&lt;failure&gt;</code> and infrastructure problems become <code>&lt;error&gt;</code>, so a dashboard never shows out-of-gas as a broken property.</p>
+<p>Starting in CLI version 0.1.3, add <code>--strict</code> to <code>fuzz</code>, <code>diff</code>, or <code>sequence</code> to turn skipped candidates in the selected command and <code>--only</code> scope into JUnit errors and exit 2 before any campaigns run. Campaign JSON includes selected, runnable, skipped, run and completed target counts. For fuzz and sequence, the input count stops at each reported first finding or the end of the successful campaign. For diff, it counts the input pairs in completed campaigns. It excludes auxiliary search rounds, mutation trials outside the reported outcome, and infrastructure outcomes.</p>
 <p>GitHub Actions, on Linux so the native backend is available:</p>
 <div class="code"><span class="code__lang">yaml</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-yaml">- uses: actions/setup-node@v4
   with: { node-version: "22" }
@@ -69,10 +70,11 @@
   run: |
     curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash -s -- --version v26.6.0
     echo "$HOME/.fe/bin" &gt;&gt; "$GITHUB_PATH"
-- run: npx -y fuzzloom doctor
-- run: npx -y fuzzloom replay --junit reports/replay.xml     # saved failures stay fixed
-- run: npx -y fuzzloom fuzz --junit reports/fuzz.xml          # new inputs every run
-- run: npx -y fuzzloom diff --junit reports/diff.xml          # sonatina against native</code></pre></div>
+- run: npx -y fuzzloom@0.1.3 doctor
+- run: npx -y fuzzloom@0.1.3 replay --junit reports/replay.xml
+- run: npx -y fuzzloom@0.1.3 fuzz --strict --junit reports/fuzz.xml
+- run: npx -y fuzzloom@0.1.3 diff --strict --junit reports/diff.xml</code></pre></div>
+<p>If your ingot declares <code>seq_*</code> targets, add <code>npx -y fuzzloom@0.1.3 sequence --strict --seed 7 --junit reports/sequence.xml</code>. Add <code>--backend native</code> in a separate job to run the same trace stream on the native backend. An empty selection exits 2, so include only the campaign commands that have targets in your ingot.</p>
 <p>Fuzzloom&#39;s own pipeline, <a href="https://github.com/MikeMoulder/fuzzloom/blob/main/scripts/ci.sh" rel="noopener"><code>scripts/ci.sh</code></a>, is a complete working example. It runs on CircleCI.</p>
 
     </article>

@@ -18,7 +18,7 @@ node --version
 Run this from inside any Fe ingot (a directory with `fe.toml` and `src/`):
 
 ```bash
-npx fuzzloom doctor
+npx -y fuzzloom@0.1.3 doctor
 ```
 
 ```text
@@ -27,8 +27,7 @@ ok    fe                fe 26.6.0 (5b3f96a) at /home/you/.fe/bin/fe
 ok    Fe library        .../node_modules/fuzzloom/ingot
 ok    Library compiles  fe check passed
 ok    Native backend    fe 26.6.0 (5b3f96a) in this machine
-warn  Project           ingot my_ingot: 0 prop_* and 0 diff_* functions, 0 skipped
-                        write `pub fn prop_<name>(args) -> bool` (or diff_<name>) in the ingot's src/
+warn  Project           ingot my_ingot: 0 prop_*, 0 diff_*, 0 seq_* functions, 0 skipped
 ```
 
 The project warning goes away once you write your first property.
@@ -52,7 +51,7 @@ pub fn prop_fee_matches_exact_math(_ amount: u64) -> bool {
 ## 4. Fuzz it
 
 ```bash
-npx fuzzloom fuzz --seed 7
+npx -y fuzzloom@0.1.3 fuzz --strict --seed 7
 ```
 
 ```text
@@ -63,6 +62,8 @@ FAIL  prop_fee_matches_exact_math(u64)  counterexample at input 2
 ```
 
 `614891469123651721` is `u64::MAX / 30 + 1`, the smallest amount for which `amount * 30` wraps. The shrinker found the exact threshold. The seed makes the run repeatable; leave it out and Fuzzloom picks one at random and prints it.
+
+`--strict` exits 2 before running if Fuzzloom skips a selected target. Use `npx -y fuzzloom@0.1.3 list` to see each target and any skip reasons.
 
 ## 5. Fix it and replay
 
@@ -75,7 +76,7 @@ pub fn fee(_ amount: u64) -> u64 {
 ```
 
 ```bash
-npx fuzzloom replay
+npx -y fuzzloom@0.1.3 replay
 ```
 
 ```text
@@ -88,5 +89,6 @@ Commit `.fuzzloom/failures/`: it is your regression suite. Every later `fuzz` al
 
 - [Writing properties](writing-properties.html): types, labels and what gets skipped.
 - [Effects and fixtures](effects.html): properties that use state or context.
+- [Stateful sequences](stateful.html) tests repeated operations on a shared fixture and replays the saved trace.
 - [Differential testing](differential.html): compare sonatina and native.
 - [Running in CI](ci.html): exit codes and JUnit reports.

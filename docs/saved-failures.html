@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Saved failures: Fuzzloom docs</title>
-<meta name="description" content="Every FAIL, ABORT and DIVERGE is saved to .fuzzloom/failures/&lt;target>-&lt;hash>.json. The record holds the shrunk input, the original input, the seed, the ite">
+<meta name="description" content="Every FAIL, ABORT and DIVERGE is saved to .fuzzloom/failures/&lt;target>-&lt;hash>.json. Single-input records store the shrunk and original inputs where availabl">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Saved failures: Fuzzloom docs">
 <meta property="og:image" content="../share.jpg">
@@ -45,7 +45,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Guides</p>
-          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html" aria-current="page">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="stateful.html">Stateful sequences</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html" aria-current="page">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
         </div>
         <div class="side__group">
           <p class="side__label">Reference</p>
@@ -61,7 +61,7 @@
     <p class="doc__crumbs"><a href="index.html">Docs</a> / Guides</p>
     <article class="prose">
 <h1 id="saved-failures">Saved failures</h1>
-<p>Every <code>FAIL</code>, <code>ABORT</code> and <code>DIVERGE</code> is saved to <code>.fuzzloom/failures/&lt;target&gt;-&lt;hash&gt;.json</code>. The record holds the shrunk input, the original input, the seed, the iteration, the backend and the fe version, plus a human-readable value per argument. <strong>Commit this directory.</strong> It is a regression suite that grows on its own.</p>
+<p>Every <code>FAIL</code>, <code>ABORT</code> and <code>DIVERGE</code> is saved to <code>.fuzzloom/failures/&lt;target&gt;-&lt;hash&gt;.json</code>. Single-input records store the shrunk and original inputs where available. Stateful records store the ordered shrunk trace for the backend that found it. Records also include the seed, iteration, backend and Fe version. Commit this directory to keep the findings as regression tests.</p>
 <div class="code"><span class="code__lang">bash</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-bash">npx fuzzloom replay                 # re-check every saved failure</code></pre></div>
 <div class="code"><span class="code__lang">text</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-text">FIXED  prop_withdraw_never_overdraws-2c81bbb3  now passes
 FAILS  prop_fee_matches_exact_math-0e05b819    still fails</code></pre></div>

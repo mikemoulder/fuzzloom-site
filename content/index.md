@@ -2,7 +2,7 @@
 
 Fuzzloom is property-based testing and fuzzing for the [Fe](https://fe-lang.org) language, with differential testing between Fe's two backends.
 
-You write a **property** as an ordinary Fe function that returns `bool`. Fuzzloom generates thousands of inputs for it inside Fe and shrinks every failure to a small counterexample. It saves each failure so you can replay it after the fix. It also runs the same logic on **sonatina (EVM)** and **native**, and pins the first input on which they disagree.
+Write a **property** as a Fe function that returns `bool`. Fuzzloom generates inputs inside Fe, shrinks failures, and saves counterexamples for replay. It can also test ordered action traces against shared state and compare the same Fe logic on **Sonatina (EVM)** and **native**.
 
 ```fe
 /// A withdrawal is allowed only up to the balance.
@@ -27,18 +27,21 @@ FAIL  prop_withdraw_never_overdraws(u128, u128)  counterexample at input 19
 - **Inputs recovered from panics:** Fe cannot catch an abort. Fuzzloom finds the aborting input by searching on the run count, then shrinks it by replay.
 - **Effects:** a property can declare `uses (ledger: mut Ledger)`. Fuzzloom builds each effect from your `fixture_*()` function, fresh for every input.
 - **Input ranges:** `/// fuzzloom: start in 1668464000..=1700000000` restricts one argument everywhere, shrinking included.
-- **Backend comparison:** `diff` compares 100,000 inputs on sonatina and native and pins the first difference in 8 `fe` runs.
-- **A regression suite:** every failure is a JSON record. `replay` re-checks them, and `fuzz` mutates them to find a fix that only handled one input.
-- **CI output:** exit codes, `--json` and JUnit XML. Infrastructure problems (compile errors, out of gas) are never reported as findings.
+- **Backend comparison.** `diff` compares 100,000 inputs per target by default and verifies a located mismatch by running the exact input on both backends.
+- **Stateful sequences.** `sequence` checks a `seq_*` invariant across actions that share one effect fixture. It shrinks failing traces and saves the ordered actions for replay.
+- **Regression records.** `replay` checks saved failures against current code. `fuzz` also mutates saved property and abort inputs to exercise nearby cases.
+- **CI output.** `--strict` catches skipped selected targets before a campaign starts. `--json` reports campaign counts and `--junit` writes test results.
 
 ## What it does not do
 
 - **It does not prove a property.** A passing campaign means 10,000 well-chosen inputs found nothing, and the report says what they exercised.
-- **No sequences of calls yet.** Each input gets fresh fixtures.
+- **Bounded traces.** Sequences have at most eight actions. A panic during a sequence is an infrastructure outcome.
 - **Limited input types.** Integers and `bool` only, 1 to 3 arguments per property.
 
 ## Where to go next
 
 - [Quick start](quickstart.html): install and run your first property in a few minutes.
 - [Writing properties](writing-properties.html): the conventions and what can be an argument.
+- [Stateful sequences](stateful.html) walks through a receipt regression on both backends.
+- [Compiler experiments](experiments.html) includes the exact shift oracle and the external Fe Keccak integration.
 - [How it works](architecture.html) and [Algorithms and guarantees](algorithms.html), for the full picture.

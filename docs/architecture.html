@@ -45,7 +45,7 @@
         </div>
         <div class="side__group">
           <p class="side__label">Guides</p>
-          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
+          <ul><li><a href="writing-properties.html">Writing properties</a></li><li><a href="results.html">Reading the results</a></li><li><a href="effects.html">Effects and fixtures</a></li><li><a href="stateful.html">Stateful sequences</a></li><li><a href="ranges.html">Input ranges</a></li><li><a href="differential.html">Differential testing</a></li><li><a href="saved-failures.html">Saved failures</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="good-properties.html">Writing good properties</a></li><li><a href="guide.html">The whole guide</a></li></ul>
         </div>
         <div class="side__group">
           <p class="side__label">Reference</p>
@@ -83,7 +83,8 @@
     GEN --&gt; CHK["check, property, shrink"]
     GEN --&gt; MUT["mutate"]
     GEN --&gt; DIF["diff"]
-    CHK &amp; MUT &amp; DIF --&gt; PAY["payload"]
+    GEN --&gt; SEQ["sequence"]
+    CHK &amp; MUT &amp; DIF &amp; SEQ --&gt; PAY["payload"]
   end
   HAR -. "imports" .-&gt; LIB
   FE -- "fe test (sonatina)" --&gt; X1["generated ingot"]
@@ -137,6 +138,10 @@
 <td><code>Target</code> and <code>target1/2/3</code>; digests, checkpoints, <code>evaluate</code>, <code>target_input_at</code></td>
 </tr>
 <tr>
+<td><code>sequence.fe</code></td>
+<td>Generate and replay action traces, trim to the first failing step, and minimize the failing prefix</td>
+</tr>
+<tr>
 <td><code>payload.fe</code></td>
 <td>The <code>#[error]</code> structs that carry every result out of Fe</td>
 </tr>
@@ -147,7 +152,7 @@
 <p><strong>Bounded variants.</strong> Each entry point has a <code>_within</code> form, or takes <code>bounds</code> directly, so a declared input range applies to the campaign, recovery, mutation and digests alike. <code>target_bounds_of(t)</code> exists because an associated-function call on a generic type cannot appear in a harness expression in fe 26.6.</p>
 <h2 id="the-cli"><a class="anchor" href="#the-cli" aria-hidden="true" tabindex="-1">#</a>The CLI</h2>
 <h3 id="discovery-discoverts"><a class="anchor" href="#discovery-discoverts" aria-hidden="true" tabindex="-1">#</a>Discovery (<code>discover.ts</code>)</h3>
-<p>Discovery reads every <code>.fe</code> file under <code>src/</code>, with comments blanked so commented-out code is ignored and line numbers stay right. It matches <code>pub fn prop_*</code> and <code>pub fn diff_*</code> signatures, including ones that <code>fe fmt</code> wrapped across lines. For each match it:</p>
+<p>Discovery reads <code>.fe</code> files under <code>src/</code> and masks comments and literals while preserving line numbers. It identifies <code>pub fn prop_*</code>, <code>pub fn diff_*</code> and <code>pub fn seq_*</code> candidates by name before checking signatures, including signatures that <code>fe fmt</code> wrapped across lines. For each module-level candidate it does the following.</p>
 <ol>
 <li>parses the parameters and keeps each argument&#39;s label: positional (<code>_ x</code>), the name, or an explicit label;</li>
 <li>parses a <code>uses (...)</code> clause into effect types;</li>
@@ -155,7 +160,7 @@
 <li>resolves each effect to exactly one fixture, by return type or else by snake-case name;</li>
 <li>computes the Fe import paths for the target, its effect types and its fixtures from the file layout (<code>src/a/b.fe</code> is <code>&lt;ingot&gt;::a::b</code>).</li>
 </ol>
-<p>Anything that cannot be tested is returned as skipped, with the reason.</p>
+<p>A candidate that cannot be tested is listed as skipped with its location and reason. With <code>--strict</code>, any skip within the selected command and <code>--only</code> scope prevents campaign execution.</p>
 <h3 id="harness-generation-harnessts"><a class="anchor" href="#harness-generation-harnessts" aria-hidden="true" tabindex="-1">#</a>Harness generation (<code>harness.ts</code>)</h3>
 <p>A harness is a throwaway ingot under <code>&lt;your ingot&gt;/.fuzzloom/tmp/&lt;label&gt;-&lt;backend&gt;/</code>. Its dependencies use relative paths, so the same file works for Windows <code>fe.exe</code> and for fe inside WSL. Every case becomes one <code>#[test]</code>. For the bounded, effectful vesting property in <code>examples/token-ledger</code>:</p>
 <div class="code"><span class="code__lang">fe</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-fe">// Generated by the Fuzzloom CLI. Do not edit.
@@ -219,6 +224,11 @@ fn case_0() {
 <td><code>evaluate</code></td>
 <td>One differential output</td>
 </tr>
+<tr>
+<td><code>check_sequence</code>, <code>replay_sequence</code></td>
+<td><code>check_sequence</code>, <code>replay_sequence</code></td>
+<td>Generate and shrink traces or execute a saved trace. The harness creates a fresh fixture on every call, and steps in that call share it</td>
+</tr>
 </tbody></table>
 </div>
 <h3 id="running-fe-and-classifying-fets-abits"><a class="anchor" href="#running-fe-and-classifying-fets-abits" aria-hidden="true" tabindex="-1">#</a>Running fe and classifying (<code>fe.ts</code>, <code>abi.ts</code>)</h3>
@@ -242,6 +252,10 @@ fn case_0() {
 <td>1 round on each backend at once: 256 checkpoints per target. For each divergence: search rounds of one checkpoint test per backend, then 1 recovery round</td>
 </tr>
 <tr>
+<td><code>sequence</code></td>
+<td>One round on the selected backend. Fe runs the action traces and shrink trials within each target&#39;s test</td>
+</tr>
+<tr>
 <td><code>replay</code>, <code>reproduce</code></td>
 <td>1 round per backend that has records, both at once</td>
 </tr>
@@ -254,7 +268,7 @@ fn case_0() {
 <li>otherwise, a pass.</li>
 </ol>
 <h3 id="failure-records-storets"><a class="anchor" href="#failure-records-storets" aria-hidden="true" tabindex="-1">#</a>Failure records (<code>store.ts</code>)</h3>
-<p><code>.fuzzloom/failures/&lt;target&gt;-&lt;fnv8&gt;.json</code>, version 1. The id is a hash of the target name and the shrunk input, so finding the same minimal failure again updates the record instead of duplicating it.</p>
+<p>Records live at <code>.fuzzloom/failures/&lt;target&gt;-&lt;hash&gt;.json</code> and use schema version 1. Single-input records use the legacy eight-digit hash. Sequence records use a sixteen-digit hash of the ordered trace and backend. Running a backend again with the same shrunk trace updates its record and preserves the other backend&#39;s verdict.</p>
 <div class="code"><span class="code__lang">json</span><button class="code__copy" type="button" aria-label="Copy code">Copy</button><pre><code class="lang-json">{
   "version": 1,
   "id": "prop_withdraw_never_overdraws-2c81bbb3",
@@ -271,7 +285,7 @@ fn case_0() {
   "fe_version": "fe 26.6.0 (5b3f96a)",
   "status": "open"
 }</code></pre></div>
-<p><code>kind</code> is <code>property</code>, <code>abort</code> (with <code>detail</code>, the panic reason) or <code>differential</code> (backend <code>both</code>, with both outputs in <code>detail</code>). A record found by a mutation campaign carries <code>seeded_by</code>. Records are only ever replayed with their stored input, so they stay valid when the generator changes. <code>replay</code> refuses a record whose target changed signature, and says so.</p>
+<p><code>kind</code> is <code>property</code>, <code>abort</code> (with the panic reason in <code>detail</code>), <code>differential</code> (backend <code>both</code>, with both outputs in <code>detail</code>) or <code>sequence</code> (with an ordered <code>sequence</code> array of typed input words). A record found by a mutation campaign carries <code>seeded_by</code>. Replay uses the stored input or trace, so it still works when the generator changes. A changed target signature is reported as an infrastructure error.</p>
 <h3 id="reports-reportts-junitts"><a class="anchor" href="#reports-reportts-junitts" aria-hidden="true" tabindex="-1">#</a>Reports (<code>report.ts</code>, <code>junit.ts</code>)</h3>
 <p>There are three outputs. The terminal output uses colour unless <code>NO_COLOR</code> is set or output is not a TTY. <code>--json</code> output preserves every field, with bigints as strings. <code>--junit</code> writes one test case per property, differential target or saved failure: findings are <code>&lt;failure&gt;</code>, infrastructure is <code>&lt;error&gt;</code>, and text is escaped, stripped of colour and of characters XML cannot carry.</p>
 <h2 id="packaging"><a class="anchor" href="#packaging" aria-hidden="true" tabindex="-1">#</a>Packaging</h2>

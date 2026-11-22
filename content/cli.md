@@ -27,7 +27,7 @@ fuzzloom <command> [path] [options]
 | `--backend <b>` | `sonatina` (EVM, the default) or `native` |
 | `--only <text>` | Select targets or saved failures whose name contains the text. The source CLI exits 2 if none match |
 | `--no-corpus` | `fuzz` without the mutation campaigns around saved failures |
-| `--uniform` | Available from source. Sample within the declared bounds with edge bias, argument correlation and corpus mutation disabled |
+| `--uniform` | In 0.1.2, sample within the declared bounds with edge bias, argument correlation and corpus mutation disabled |
 | `--json` | Machine-readable output |
 | `--junit <file>` | Also write a JUnit XML report: findings are `<failure>`, infrastructure problems are `<error>` |
 | `-h`, `--help` | The usage text |
